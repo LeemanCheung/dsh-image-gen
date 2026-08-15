@@ -62,7 +62,7 @@ Verified against:
 
 - DeepSeek Harness `0.1.0-rc.6`
 - `dsh-codex-connect` `0.1.0-alpha.4.4`
-- Node.js `24.15.0`
+- Node.js `24.15.0` (package support: `^22.19.0` or `>=24.0.0`)
 - DSH Web profile on Windows 11
 - Real Codex subscription generation, durable replay, Blob preview, and download controls
 
@@ -92,7 +92,7 @@ The repository commits `lib/index.js` and `lib/client.js`, so a pinned Git insta
 
 ## Authentication
 
-`authMode: auto` is the default. It first asks the installed `dsh-codex-connect` package for its DSH-owned, refreshable ChatGPT OAuth credential and sends it only to the fixed first-party endpoint `https://chatgpt.com/backend-api/codex/images/generations`. If Codex sign-in is unavailable, it falls back to the `OPENAI_API_KEY` DSH credential reference.
+`authMode: auto` is the default. It first asks the installed `dsh-codex-connect` package for its DSH-owned, refreshable ChatGPT OAuth credential and sends it only to the fixed first-party endpoint `https://chatgpt.com/backend-api/codex/images/generations`. If Codex credential resolution, compatibility checking, or refresh fails for any non-cancelled reason, it then tries the DSH credential reference named by `apiKeyEnv` (default `OPENAI_API_KEY`); if neither works, it returns the combined failure. `codex-subscription` never falls back.
 
 Use `authMode: codex-subscription` to forbid API-key fallback, or `authMode: api-key` to use only the configured Images API account. Never put an OAuth token or API key in `cordis.patch.yml`, chat messages, Git, or screenshots. The plugin resolves authentication for every generation and does not retain it after the request.
 
@@ -139,6 +139,22 @@ The bundle inserts the `image-gen` row with safe defaults. Override it in the se
 ```
 
 `baseUrl`, `model`, `moderation`, `partialImages`, output compression, and API pricing apply only to API-key mode. Codex subscription mode fixes the model to `gpt-image-2`, uses the fixed first-party Codex endpoint, returns PNG, and never sends OAuth to `baseUrl`. Configuration fails at load for an invalid provider URL or default image size. Plain HTTP is accepted only for loopback development endpoints. Every credential-bearing request uses `redirect: "error"`.
+
+### API-key contract and operation bounds
+
+Create a DSH credential named by `apiKeyEnv` (default `OPENAI_API_KEY`) or export that environment variable before starting the DSH Host, then set `authMode: api-key`. Never put the secret in the profile patch.
+
+A custom `baseUrl` must expose `<baseUrl>/images/generations` and support either an OpenAI-compatible `data[0].b64_json` response or SSE `image_generation.partial_image` / `image_generation.completed` events carrying `b64_json`. It must be HTTPS outside loopback.
+
+| Setting | Accepted range / behavior |
+| --- | --- |
+| `partialImages` | 0–3; API-key mode only. |
+| `requestTimeoutMs` | 10,000–300,000 ms for the whole operation. |
+| `maxRetries` | 0–5; total attempts are `maxRetries + 1`. |
+| `retryBaseMs` | 100–30,000 ms before bounded exponential backoff. |
+| `maxConcurrent` | 1–8; an operation at the limit is rejected immediately rather than queued. |
+
+Only transient provider failures (429, 5xx, retryable protocol/response errors, and network failures) are retried. Provider moderation and user-input errors fail immediately.
 
 ### Cost note
 

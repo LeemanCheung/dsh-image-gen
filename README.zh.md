@@ -62,7 +62,7 @@ OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，通过订阅 OAu
 
 - DeepSeek Harness `0.1.0-rc.6`
 - `dsh-codex-connect` `0.1.0-alpha.4.4`
-- Node.js `24.15.0`
+- Node.js `24.15.0`（软件包支持：`^22.19.0` 或 `>=24.0.0`）
 - Windows 11 上的 DSH Web profile
 - 真实 Codex 订阅生图、持久回放、Blob 预览和下载控件
 
@@ -92,7 +92,7 @@ dsh plugin --profile web add .
 
 ## 身份认证
 
-默认 `authMode: auto`。插件会先通过已安装的 `dsh-codex-connect` 获取由 DSH 管理、可刷新的 ChatGPT OAuth 凭据，并且只把它发送到固定的 OpenAI 官方地址 `https://chatgpt.com/backend-api/codex/images/generations`。Codex 未登录时，才回退到 DSH 凭据引用 `OPENAI_API_KEY`。
+默认 `authMode: auto`。插件会先通过已安装的 `dsh-codex-connect` 获取由 DSH 管理、可刷新的 ChatGPT OAuth 凭据，并且只把它发送到固定的 OpenAI 官方地址 `https://chatgpt.com/backend-api/codex/images/generations`。只要 Codex 凭据解析、兼容性检查或刷新因非取消原因失败，就会尝试 `apiKeyEnv` 指定的 DSH 凭据引用（默认 `OPENAI_API_KEY`）；两者都不可用时返回组合错误。`codex-subscription` 模式绝不回退。
 
 设置 `authMode: codex-subscription` 可禁止 API Key 回退；设置 `authMode: api-key` 则只使用 Images API 账户。不要把 OAuth token 或 API Key 写入 `cordis.patch.yml`、聊天消息、Git 或截图。插件会为每次生图重新解析身份认证，并在请求结束后丢弃。
 
@@ -139,6 +139,22 @@ Bundle 默认插入 `image-gen` 行。可以在所选 profile 的 `cordis.patch.
 ```
 
 `baseUrl`、`model`、`moderation`、`partialImages`、输出压缩和 API 计费仅用于 API Key 模式。Codex 订阅模式固定使用 `gpt-image-2` 和官方 Codex 地址、返回 PNG，并且绝不会把 OAuth 发送到 `baseUrl`。Provider URL 或默认尺寸无效时，插件会在加载阶段直接失败；普通 HTTP 仅允许回环开发地址；所有携带凭据的请求都使用 `redirect: "error"`。
+
+### API Key 合约与运行边界
+
+在 DSH 凭据管理中创建名称与 `apiKeyEnv` 相同的凭据（默认 `OPENAI_API_KEY`），或在启动 DSH Host 前导出该环境变量，然后设置 `authMode: api-key`。不要把 secret 写入 profile patch。
+
+自定义 `baseUrl` 必须提供 `<baseUrl>/images/generations`，并支持 OpenAI 兼容的 `data[0].b64_json` 非流式响应，或携带 `b64_json` 的 SSE `image_generation.partial_image` / `image_generation.completed` 事件。除回环地址外必须使用 HTTPS。
+
+| 配置 | 范围 / 行为 |
+| --- | --- |
+| `partialImages` | 0–3；仅 API Key 模式。 |
+| `requestTimeoutMs` | 整个操作 10,000–300,000 ms。 |
+| `maxRetries` | 0–5；总尝试次数为 `maxRetries + 1`。 |
+| `retryBaseMs` | 100–30,000 ms，之后采用有上限的指数退避。 |
+| `maxConcurrent` | 1–8；达到上限立即拒绝，不排队。 |
+
+只有暂时性 Provider 故障（429、5xx、可重试的协议/响应错误和网络错误）会重试。Provider 审核和用户输入错误会立即失败。
 
 ### 成本说明
 
