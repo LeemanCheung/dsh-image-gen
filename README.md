@@ -11,6 +11,16 @@ Generate images in DeepSeek Harness with OpenAI `gpt-image-2`, using a signed-in
 
 The illustration mirrors the shipped card states. API-key mode can replace the light field with real streamed drafts; Codex subscription mode animates until its non-streaming response arrives.
 
+## Capability map
+
+| Area | Delivered behavior |
+| --- | --- |
+| Tool and access paths | Exposes the Codex-compatible `image_gen` tool for `gpt-image-2`; defaults to refreshable `dsh-codex-connect` subscription OAuth and can explicitly use a DSH API-key credential. |
+| Progressive experience | Subscription requests show a developing animation until their non-streaming result; API-key requests can show up to three provider-sent partial images, cross-faded in place. |
+| Durable results | Saves only the completed image as a DSH immutable attachment, so the same card can replay, preview in a lightbox, and download after a session reload. |
+| Conversation compatibility | Returns text-only tool output to the model while retaining the image reference in UI metadata, including for nested Code Mode calls. |
+| Safety boundaries | Resolves credentials per request, pins the subscription endpoint, rejects redirects, bounds response sizes and concurrency, validates image bytes through DSH, and retries only transient failures. |
+
 ## Highlights
 
 - Registers the Codex-compatible model tool name `image_gen`.
