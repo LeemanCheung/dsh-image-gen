@@ -57,10 +57,10 @@ Verification date: 2026-08-15.
 
 ## Install
 
-Review third-party source before installation and pin a commit:
+Review third-party source before installation and pin a release tag or commit:
 
 ```powershell
-dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#<commit-sha>
+dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.1.0
 ```
 
 For local development:

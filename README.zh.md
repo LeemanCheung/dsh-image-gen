@@ -57,10 +57,10 @@ OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，公开源码显�
 
 ## 安装
 
-安装第三方插件前请先审查源码，并固定提交版本：
+安装第三方插件前请先审查源码，并固定 Release 标签或提交版本：
 
 ```powershell
-dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#<commit-sha>
+dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.1.0
 ```
 
 本地开发安装：
