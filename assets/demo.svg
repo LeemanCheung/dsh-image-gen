@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="560" viewBox="0 0 960 560" role="img" aria-labelledby="title desc">
+  <title id="title">dsh-image-gen progressive generation card</title>
+  <desc id="desc">An animated image generation card develops a luminous blue whale from a moving light field into a sharp final preview.</desc>
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f5f6fa"/><stop offset="1" stop-color="#e8ebf4"/></linearGradient>
+    <linearGradient id="mark" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#315cff"/><stop offset=".64" stop-color="#9c5cff"/><stop offset="1" stop-color="#ff67b6"/></linearGradient>
+    <linearGradient id="ocean" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#112543"/><stop offset=".58" stop-color="#142a4c"/><stop offset="1" stop-color="#07111f"/></linearGradient>
+    <linearGradient id="whale" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#d9f8ff"/><stop offset=".4" stop-color="#60d4ff"/><stop offset="1" stop-color="#5968ff"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#bff5ff" stop-opacity=".86"/><stop offset="1" stop-color="#6983ff" stop-opacity="0"/></radialGradient>
+    <filter id="shadow"><feDropShadow dx="0" dy="18" stdDeviation="20" flood-color="#172040" flood-opacity=".18"/></filter>
+    <filter id="blur"><feGaussianBlur stdDeviation="18"/></filter>
+    <filter id="develop"><feGaussianBlur><animate attributeName="stdDeviation" values="18;18;5;0;0" keyTimes="0;.2;.53;.72;1" dur="8s" repeatCount="indefinite"/></feGaussianBlur></filter>
+    <clipPath id="stage"><rect x="204" y="132" width="552" height="310"/></clipPath>
+    <style>
+      text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .scan { animation: scan 3.2s cubic-bezier(.48,0,.5,1) infinite; }
+      .orb { transform-origin: 480px 286px; animation: breathe 2.8s ease-in-out infinite; }
+      .draft { animation: appear 8s steps(1) infinite; }
+      .final { animation: develop 8s ease infinite; transform-origin: 480px 286px; }
+      .pulse { animation: pulse 1.8s ease-out infinite; transform-origin: center; }
+      @keyframes scan { 0% { transform: translateY(-120px); opacity:0 } 16% { opacity:.8 } 100% { transform:translateY(390px); opacity:0 } }
+      @keyframes breathe { 50% { transform:scale(1.09); opacity:.68 } }
+      @keyframes appear { 0%,21% { opacity:0 } 22%,100% { opacity:1 } }
+      @keyframes develop { 0%,18% { opacity:0; transform:scale(1.04) } 38% { opacity:.34 } 65%,100% { opacity:1; transform:scale(1) } }
+      @keyframes pulse { 55% { transform:scale(1.65); opacity:0 } 56%,100% { transform:scale(1); opacity:.34 } }
+      @media (prefers-reduced-motion: reduce) { * { animation-duration:.001ms !important; animation-iteration-count:1 !important } .final,.draft { opacity:1 } }
+    </style>
+  </defs>
+  <rect width="960" height="560" rx="30" fill="url(#page)"/>
+  <g filter="url(#shadow)">
+    <rect x="190" y="70" width="580" height="420" rx="22" fill="#fbfcff" stroke="#d9deeb"/>
+    <path d="M190 112a22 22 0 0 1 22-22h536a22 22 0 0 1 22 22v20H190z" fill="#f8f9fd"/>
+    <line x1="190" y1="132" x2="770" y2="132" stroke="#dde1eb"/>
+    <rect x="210" y="96" width="28" height="28" rx="9" fill="url(#mark)"/>
+    <path d="m224 101.5 1.7 5.3 5.3 1.7-5.3 1.7-1.7 5.3-1.7-5.3-5.3-1.7 5.3-1.7z" fill="white"/>
+    <text x="250" y="108" fill="#191c23" font-size="14" font-weight="650">Generating image</text>
+    <text x="250" y="123" fill="#7b818c" font-size="10.5">Rendering pixels · GPT Image 2</text>
+    <circle cx="704" cy="111" r="8" fill="#5b76ff" fill-opacity=".16" class="pulse"/>
+    <circle cx="704" cy="111" r="4" fill="#5b76ff"/>
+    <text x="716" y="115" fill="#777d87" font-size="11">8s</text>
+    <g clip-path="url(#stage)">
+      <rect x="204" y="132" width="552" height="310" fill="url(#ocean)"/>
+      <circle cx="340" cy="210" r="176" fill="#725cff" opacity=".24" filter="url(#blur)"/>
+      <circle cx="650" cy="365" r="168" fill="#ff5c9d" opacity=".17" filter="url(#blur)"/>
+      <g class="orb">
+        <circle cx="480" cy="286" r="48" fill="none" stroke="#fff" stroke-opacity=".35"/>
+        <circle cx="480" cy="286" r="35" fill="none" stroke="#fff" stroke-opacity=".28" stroke-dasharray="3 6"/>
+        <circle cx="480" cy="286" r="10" fill="#fff"/>
+        <circle cx="480" cy="286" r="78" fill="url(#glow)" opacity=".56"/>
+      </g>
+      <g class="final" filter="url(#develop)">
+        <path d="M204 351c82-36 126-32 190-11 76 24 142 18 210-8 57-22 101-18 152 3v107H204z" fill="#0a172a"/>
+        <path d="M204 376c82-18 136 10 204 13 81 4 149-34 222-23 49 7 83 26 126 38v38H204z" fill="#08111f" opacity=".72"/>
+        <ellipse cx="466" cy="281" rx="119" ry="43" fill="url(#whale)" transform="rotate(-8 466 281)"/>
+        <path d="M360 275c-38-36-72-27-97-4 37 2 57 21 75 39z" fill="#63bff7"/>
+        <path d="M541 267c34-28 64-19 82 3-27-1-46 13-61 31z" fill="#8ce8ff"/>
+        <path d="M462 304c23 29 54 30 73 11-31 1-46-10-59-25z" fill="#5478dc"/>
+        <circle cx="519" cy="267" r="3.4" fill="#08111f"/>
+        <path d="M548 247c15-31 2-55-7-66 4 25-4 41-19 61" fill="none" stroke="#bff5ff" stroke-width="5" stroke-linecap="round"/>
+        <circle cx="541" cy="184" r="7" fill="#d9fbff" opacity=".75"/>
+        <circle cx="555" cy="164" r="4" fill="#d9fbff" opacity=".58"/>
+        <circle cx="531" cy="151" r="3" fill="#d9fbff" opacity=".45"/>
+        <ellipse cx="474" cy="284" rx="180" ry="110" fill="url(#glow)" opacity=".32"/>
+      </g>
+      <rect class="scan" x="204" y="132" width="552" height="82" fill="url(#glow)" opacity=".7"/>
+      <g class="draft"><rect x="218" y="146" width="70" height="22" rx="11" fill="#080c16" fill-opacity=".7" stroke="#fff" stroke-opacity=".26"/><text x="232" y="161" fill="#f2f7ff" font-size="9" letter-spacing=".8">LIVE DRAFT</text></g>
+    </g>
+    <text x="212" y="465" fill="#272b33" font-size="12">A luminous blue whale drifting through a deep cinematic ocean…</text>
+    <rect x="212" y="476" width="70" height="1" fill="#dce0ea"/>
+    <rect x="292" y="476" width="48" height="1" fill="#dce0ea"/>
+  </g>
+</svg>

@@ -1,0 +1,4 @@
+# GPT Image 2 model tool plus its progressive Web tool card.
+- insert:
+    - id: image-gen
+      name: 'dsh-image-gen'
