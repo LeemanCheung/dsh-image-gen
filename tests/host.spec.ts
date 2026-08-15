@@ -6,6 +6,7 @@ import { IMAGE_GEN_RPC_ENDPOINT } from '../src/rpc.ts'
 import { PRESENTATION_SCHEMA, REFERENCE_MARKER, RESULT_SCHEMA } from '../src/types.ts'
 
 const config: Config = {
+  authMode: 'api-key',
   apiKeyEnv: 'OPENAI_API_KEY',
   baseUrl: 'https://api.openai.com/v1',
   model: 'gpt-image-2',

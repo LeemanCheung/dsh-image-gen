@@ -1,5 +1,6 @@
 /** Small dependency-free GPT Image 2 streaming client. */
 
+import { CODEX_IMAGE_BASE_URL } from './codex.ts'
 import type {
   ImageBackground,
   ImageOutputFormat,
@@ -49,6 +50,9 @@ export interface OpenAIImageClientOptions {
   maxRetries: number
   retryBaseMs: number
   maxImageBytes: number
+  protocol?: 'openai-api' | 'codex-subscription'
+  accountId?: string
+  turnId?: string
   fetchImpl?: typeof fetch
 }
 
@@ -370,9 +374,21 @@ function wait(ms: number, signal: AbortSignal): Promise<void> {
 export class OpenAIImageClient {
   private readonly endpoint: string
   private readonly fetchImpl: typeof fetch
+  private readonly protocol: 'openai-api' | 'codex-subscription'
 
   constructor(private readonly options: OpenAIImageClientOptions) {
-    this.endpoint = `${imageApiBaseUrl(options.baseUrl)}/images/generations`
+    const baseUrl = imageApiBaseUrl(options.baseUrl)
+    this.protocol = options.protocol ?? 'openai-api'
+    if (this.protocol === 'codex-subscription') {
+      if (baseUrl !== CODEX_IMAGE_BASE_URL) throw new TypeError('Codex subscription credentials may be sent only to the first-party Codex endpoint')
+      if (options.accountId === undefined || options.accountId.length === 0 || options.accountId.length > 256) {
+        throw new TypeError('Codex subscription mode requires a valid ChatGPT account id')
+      }
+      if (options.turnId === undefined || options.turnId.length === 0 || options.turnId.length > 512) {
+        throw new TypeError('Codex subscription mode requires a valid image turn id')
+      }
+    }
+    this.endpoint = `${baseUrl}/images/generations`
     this.fetchImpl = options.fetchImpl ?? fetch
   }
 
@@ -387,15 +403,19 @@ export class OpenAIImageClient {
       prompt: request.prompt,
       size: request.size,
       quality: request.quality,
-      output_format: request.outputFormat,
-      ...request.outputFormat === 'png' || request.outputCompression === undefined
-        ? {}
-        : { output_compression: request.outputCompression },
       background: request.background,
-      moderation: this.options.moderation,
       n: 1,
-      stream: true,
-      partial_images: this.options.partialImages,
+      ...this.protocol === 'codex-subscription'
+        ? {}
+        : {
+            output_format: request.outputFormat,
+            ...request.outputFormat === 'png' || request.outputCompression === undefined
+              ? {}
+              : { output_compression: request.outputCompression },
+            moderation: this.options.moderation,
+            stream: true,
+            partial_images: this.options.partialImages,
+          },
     })
 
     let lastError: unknown
@@ -408,9 +428,16 @@ export class OpenAIImageClient {
           method: 'POST',
           redirect: 'error',
           headers: {
-            accept: 'text/event-stream',
+            accept: this.protocol === 'codex-subscription' ? 'application/json' : 'text/event-stream',
             authorization: `Bearer ${this.options.apiKey}`,
             'content-type': 'application/json',
+            ...this.protocol === 'codex-subscription'
+              ? {
+                  'chatgpt-account-id': this.options.accountId!,
+                  'x-codex-image-turn-id': this.options.turnId!,
+                  originator: 'deepseek-harness',
+                }
+              : {},
           },
           body,
           signal,

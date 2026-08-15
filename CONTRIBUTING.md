@@ -28,7 +28,7 @@ npm run check
 
 ## Real provider checks
 
-The default suite never reads `OPENAI_API_KEY`. If you manually exercise OpenAI, use a disposable test project, review cost settings, and never attach a key, private prompt, or private generated image to an issue.
+The default suite never reads Codex OAuth or `OPENAI_API_KEY`. If you manually exercise OpenAI, review the selected subscription allowance or API cost first, and never attach a token, key, private prompt, or private generated image to an issue.
 
 ## Security
 

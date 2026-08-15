@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createServer, type Server } from 'node:http'
+import { CODEX_IMAGE_BASE_URL } from '../src/codex.ts'
 import {
   ImageApiError,
   OpenAIImageClient,
@@ -98,6 +99,49 @@ describe('OpenAI image transport', () => {
     }), { headers: { 'content-type': 'application/json' } }))
     const generated = await client(fetchImpl, { maxImageBytes: 16_384 }).generate(request, new AbortController().signal, () => {})
     expect(Buffer.from(generated.data)).toEqual(image)
+  })
+
+  it('uses the fixed Codex subscription endpoint without API-only streaming fields', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      expect(String(input)).toBe(`${CODEX_IMAGE_BASE_URL}/images/generations`)
+      expect(init?.redirect).toBe('error')
+      expect(init?.headers).toMatchObject({
+        accept: 'application/json',
+        authorization: 'Bearer oauth-secret',
+        'chatgpt-account-id': 'account-123',
+        'x-codex-image-turn-id': 'call-123',
+        originator: 'deepseek-harness',
+      })
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      expect(body).toMatchObject({ model: 'gpt-image-2', prompt: request.prompt, n: 1 })
+      expect(body).not.toHaveProperty('stream')
+      expect(body).not.toHaveProperty('partial_images')
+      expect(body).not.toHaveProperty('moderation')
+      expect(body).not.toHaveProperty('output_format')
+      return new Response(JSON.stringify({
+        data: [{ b64_json: Buffer.from('codex-image').toString('base64') }],
+        output_format: 'png',
+        size: '1024x1024',
+        quality: 'medium',
+        background: 'opaque',
+      }), { headers: { 'content-type': 'application/json' } })
+    })
+    const progress: GenerateImageProgress[] = []
+    const generated = await client(fetchImpl, {
+      baseUrl: CODEX_IMAGE_BASE_URL,
+      apiKey: 'oauth-secret',
+      protocol: 'codex-subscription',
+      accountId: 'account-123',
+      turnId: 'call-123',
+    }).generate(request, new AbortController().signal, event => { progress.push(event) })
+    expect(Buffer.from(generated.data).toString()).toBe('codex-image')
+    expect(progress.map(event => event.kind)).toEqual(['requesting', 'generating'])
+
+    expect(() => client(fetchImpl, {
+      protocol: 'codex-subscription',
+      accountId: 'account-123',
+      turnId: 'call-123',
+    })).toThrow('first-party Codex endpoint')
   })
 
   it('cancels an unfinished SSE body after the completed event', async () => {

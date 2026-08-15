@@ -78,7 +78,7 @@ function card(rpc: (endpoint: string) => Promise<unknown>) {
     register: vi.fn(() => () => {}),
     bind: vi.fn(() => (key: string) => ({
       generating: 'Generating image', generated: 'Generated image', failed: 'Image generation failed',
-      requesting: 'Contacting GPT Image 2', rendering: 'Rendering pixels', saving: 'Saving final image', waiting: 'Preparing the canvas',
+      requesting: 'Contacting GPT Image 2', rendering: 'Rendering pixels', saving: 'Saving final image', waiting: 'Preparing the canvas', ready: 'Final image saved',
       draft: 'Live draft', preview: 'Preview', download: 'Download', close: 'Close', details: 'Prompt & details',
       loading: 'Loading final image', unavailable: 'Unavailable', noOutput: 'No output',
     } as Record<string, string>)[key] ?? key),
@@ -137,6 +137,7 @@ describe('animated image card', () => {
 
     await waitFor(() => { expect(screen.getByRole('button', { name: 'Preview' })).toBeTruthy() })
     expect(screen.getByRole('img').getAttribute('src')).toBe('blob:final-image')
+    expect(screen.getByText('Final image saved')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
     expect(screen.getByRole('dialog')).toBeTruthy()
     fireEvent.keyDown(document, { key: 'Escape' })

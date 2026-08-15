@@ -31,6 +31,7 @@ const en = {
   rendering: 'Rendering pixels',
   saving: 'Saving final image',
   waiting: 'Preparing the canvas',
+  ready: 'Final image saved',
   draft: 'Live draft',
   preview: 'Preview',
   download: 'Download',
@@ -51,6 +52,7 @@ const zh: Record<LocaleKey, string> = {
   rendering: '正在渲染像素',
   saving: '正在保存最终图片',
   waiting: '正在准备画布',
+  ready: '最终图片已保存',
   draft: '实时草图',
   preview: '预览',
   download: '下载',
@@ -272,9 +274,11 @@ function ImageGenCard({ sessionId, callId, block, t, requestProgress, requestIma
       ? t('rendering')
       : progress?.state === 'saving'
         ? t('saving')
-        : settled && presentation !== undefined && finalImage === undefined && !loadError
-          ? t('loading')
-          : t('waiting')
+        : settled && finalImage !== undefined
+          ? t('ready')
+          : settled && presentation !== undefined && !loadError
+            ? t('loading')
+            : t('waiting')
   const title = failed ? t('failed') : settled ? t('generated') : t('generating')
   const startedAt = progress?.startedAt || ('time' in block ? block.time : Date.now())
   const elapsed = result?.elapsedMs ?? Math.max(0, Date.now() - startedAt)

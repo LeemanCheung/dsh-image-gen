@@ -9,6 +9,7 @@ import { SessionId } from '@deepseek-ai/dsh-session'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-session-persistence'
+import { CODEX_IMAGE_BASE_URL, resolveCodexSubscriptionAuth } from './codex.ts'
 import {
   ImageApiError,
   OpenAIImageClient,
@@ -40,6 +41,7 @@ export const inject = ['tools', 'attachments', 'credentials', 'connection', 'ses
 
 /** Deployment configuration for provider access, defaults, and operation bounds. */
 export interface Config {
+  authMode: 'auto' | 'codex-subscription' | 'api-key'
   apiKeyEnv: string
   baseUrl: string
   model: string
@@ -58,6 +60,7 @@ export interface Config {
 
 /** Cordis configuration schema. */
 export const Config: Schema<Config> = Schema.object({
+  authMode: Schema.union(['auto', 'codex-subscription', 'api-key']).default('auto'),
   apiKeyEnv: Schema.string().default('OPENAI_API_KEY'),
   baseUrl: Schema.string().default('https://api.openai.com/v1'),
   model: Schema.string().default('gpt-image-2'),
@@ -243,6 +246,32 @@ export function apply(ctx: Context, config: Config): void {
   const lifetime = new AbortController()
   let stopping = false
   const keyOf = (sessionId: string, callId: string): string => `${sessionId}\u0000${callId}`
+  const trackBackgroundWork = (work: Promise<unknown>): void => {
+    const settled = work.then(() => {}, () => {})
+    inFlight.add(settled)
+    void settled.finally(() => { inFlight.delete(settled) })
+  }
+  const resolveImageAuth = async (signal: AbortSignal): Promise<
+    | { kind: 'codex-subscription'; apiKey: string; accountId: string }
+    | { kind: 'api-key'; apiKey: string }
+  > => {
+    let codexError: unknown
+    if (config.authMode !== 'api-key') {
+      try {
+        const auth = await resolveCodexSubscriptionAuth(signal, undefined, undefined, undefined, trackBackgroundWork)
+        return { kind: 'codex-subscription', apiKey: auth.accessToken, accountId: auth.accountId }
+      } catch (error) {
+        signal.throwIfAborted()
+        codexError = error
+        if (config.authMode === 'codex-subscription') throw error
+      }
+    }
+    const resolved = await ctx.credentials.resolve(credentialRef(config.apiKeyEnv))
+    signal.throwIfAborted()
+    if (resolved !== undefined) return { kind: 'api-key', apiKey: resolved.value }
+    if (codexError instanceof Error) throw new Error(`${codexError.message} No ${config.apiKeyEnv} fallback is configured.`, { cause: codexError })
+    throw new Error(`No credential is configured for ${config.apiKeyEnv}. Store it in DSH credentials or export it before starting DSH.`)
+  }
 
   ctx.effect(() => async () => {
     stopping = true
@@ -291,7 +320,7 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'image_gen',
-    description: 'Generate one new image with OpenAI GPT Image 2. Use this when the user asks to create, draw, render, illustrate, or design an image. The result appears in an animated DSH image card with preview and download. GPT Image 2 does not support transparent backgrounds.',
+    description: 'Generate one new image with OpenAI GPT Image 2 using the signed-in Codex subscription by default, with API-key fallback when configured. Use this when the user asks to create, draw, render, illustrate, or design an image. The result appears in an animated DSH image card with preview and download. GPT Image 2 does not support transparent backgrounds.',
     parameters: {
       prompt: {
         type: 'string',
@@ -310,11 +339,11 @@ export function apply(ctx: Context, config: Config): void {
       output_format: {
         type: 'string',
         enum: ['png', 'jpeg', 'webp'],
-        description: 'Output format. JPEG is usually fastest; omit for deployment default.',
+        description: 'Output format. Codex subscription mode accepts PNG only; JPEG/WebP require API-key mode. Omit for deployment default.',
       },
       output_compression: {
         type: 'integer',
-        description: 'JPEG/WebP compression quality from 0 to 100. Do not set for PNG.',
+        description: 'API-key mode only: JPEG/WebP compression quality from 0 to 100. Do not set for PNG.',
       },
       background: {
         type: 'string',
@@ -418,27 +447,34 @@ export function apply(ctx: Context, config: Config): void {
       const requestSignal = AbortSignal.any([lifetime.signal, exec.signal, AbortSignal.timeout(config.requestTimeoutMs)])
 
       try {
-        const resolved = await ctx.credentials.resolve(credentialRef(config.apiKeyEnv))
+        const auth = await resolveImageAuth(requestSignal)
         requestSignal.throwIfAborted()
-        if (resolved === undefined) {
-          throw new Error(`No credential is configured for ${config.apiKeyEnv}. Store it in DSH credentials or export it before starting DSH.`)
+        const requestOutputFormat = auth.kind === 'codex-subscription' && args.output_format === undefined ? 'png' : outputFormat
+        if (auth.kind === 'codex-subscription' && requestOutputFormat !== 'png') {
+          throw new Error('Codex subscription image generation currently returns PNG. Set output_format to png or omit it.')
         }
+        if (auth.kind === 'codex-subscription' && args.output_compression !== undefined) {
+          throw new Error('output_compression is available only in API-key mode')
+        }
+        const requestModel = auth.kind === 'codex-subscription' ? 'gpt-image-2' : config.model
         const client = new OpenAIImageClient({
-          baseUrl: config.baseUrl,
-          apiKey: resolved.value,
-          model: config.model,
+          baseUrl: auth.kind === 'codex-subscription' ? CODEX_IMAGE_BASE_URL : config.baseUrl,
+          apiKey: auth.apiKey,
+          model: requestModel,
           moderation: config.moderation,
-          partialImages: config.partialImages,
+          partialImages: auth.kind === 'codex-subscription' ? 0 : config.partialImages,
           maxRetries: config.maxRetries,
           retryBaseMs: config.retryBaseMs,
           maxImageBytes: ctx.attachments.imageLimits.maxImageBytes,
+          protocol: auth.kind === 'codex-subscription' ? 'codex-subscription' : 'openai-api',
+          ...(auth.kind === 'codex-subscription' ? { accountId: auth.accountId, turnId: callId } : {}),
         })
         const generated = await client.generate({
           prompt,
           size,
           quality,
-          outputFormat,
-          ...(outputFormat === 'png' ? {} : { outputCompression }),
+          outputFormat: requestOutputFormat,
+          ...(requestOutputFormat === 'png' ? {} : { outputCompression }),
           background: args.background ?? config.defaultBackground,
         }, requestSignal, (progress) => {
           entry.revision += 1
@@ -463,7 +499,7 @@ export function apply(ctx: Context, config: Config): void {
         return {
           schema: RESULT_SCHEMA,
           callId,
-          model: config.model,
+          model: requestModel,
           prompt,
           image: imageRefValue(ref),
           size: generated.size,
