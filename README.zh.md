@@ -11,7 +11,9 @@
 
 <p align="center"><img src="./assets/demo.svg" width="760" alt="dsh-image-gen 渐进预览动画" /></p>
 
-上图对应插件实际卡片状态。API Key 模式可用真实流式草图替换光场；Codex 订阅接口为非流式，成图返回前会持续播放显影动画。
+<p align="center"><img src="./assets/final-card.png" width="760" alt="dsh-image-gen 完成态持久图片卡片" /></p>
+
+这些插图对应插件实际的显影与完成卡片状态。API Key 模式可用真实流式草图替换光场；Codex 订阅接口为非流式，成图返回前会持续播放显影动画。完成态会保留为 DSH 的持久附件，并提供预览和下载控件。
 
 ## 功能总览
 

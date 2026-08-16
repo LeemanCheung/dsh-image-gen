@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" role="img" aria-labelledby="title description">
+  <title id="title">dsh-image-gen completed image card</title>
+  <desc id="description">A DeepSeek Harness image generation card showing a completed GPT Image 2 result, durable attachment, preview, and download actions.</desc>
+  <defs>
+    <linearGradient id="page" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#f4f6fb"/><stop offset="1" stop-color="#e5eaf5"/></linearGradient>
+    <linearGradient id="top" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#315cff"/><stop offset=".64" stop-color="#9c5cff"/><stop offset="1" stop-color="#ff67b6"/></linearGradient>
+    <linearGradient id="ocean" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#102543"/><stop offset=".55" stop-color="#17355e"/><stop offset="1" stop-color="#07111f"/></linearGradient>
+    <linearGradient id="whale" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#e2fbff"/><stop offset=".42" stop-color="#67d8ff"/><stop offset="1" stop-color="#5a65f4"/></linearGradient>
+    <radialGradient id="glow"><stop stop-color="#c6f7ff" stop-opacity=".88"/><stop offset="1" stop-color="#5c7cff" stop-opacity="0"/></radialGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="150%"><feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#172040" flood-opacity=".18"/></filter>
+    <filter id="blur"><feGaussianBlur stdDeviation="22"/></filter>
+    <clipPath id="stage"><rect x="252" y="166" width="696" height="390" rx="0"/></clipPath>
+    <style>text { font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, &quot;Segoe UI&quot;, sans-serif; }</style>
+  </defs>
+  <rect width="1200" height="760" fill="url(#page)"/>
+  <g filter="url(#shadow)">
+    <rect x="220" y="74" width="760" height="610" rx="24" fill="#ffffff" stroke="#d9deeb"/>
+    <path d="M220 120a24 24 0 0 1 24-24h712a24 24 0 0 1 24 24v46H220z" fill="#fafbff"/>
+    <line x1="220" x2="980" y1="166" y2="166" stroke="#dde1eb"/>
+    <rect x="246" y="115" width="30" height="30" rx="10" fill="url(#top)"/>
+    <path d="m261 120.5 1.8 5.5 5.5 1.8-5.5 1.8-1.8 5.5-1.8-5.5-5.5-1.8 5.5-1.8z" fill="#fff"/>
+    <text x="290" y="129" fill="#191c23" font-size="16" font-weight="750">Image generated</text>
+    <text x="290" y="148" fill="#7b818c" font-size="12.5">GPT Image 2 · durable DSH attachment</text>
+    <rect x="819" y="116" width="127" height="29" rx="14.5" fill="#e9f8ef"/>
+    <circle cx="840" cy="130.5" r="4" fill="#3aa568"/>
+    <text x="851" y="135" fill="#287b4c" font-size="12" font-weight="750">Completed</text>
+    <g clip-path="url(#stage)">
+      <rect x="252" y="166" width="696" height="390" fill="url(#ocean)"/>
+      <circle cx="386" cy="250" r="240" fill="#725cff" opacity=".22" filter="url(#blur)"/>
+      <circle cx="794" cy="450" r="220" fill="#ff5c9d" opacity=".14" filter="url(#blur)"/>
+      <ellipse cx="603" cy="376" rx="236" ry="146" fill="url(#glow)" opacity=".37"/>
+      <path d="M252 450c95-44 152-36 234-8 91 31 173 22 254-12 72-30 137-24 208 4v122H252z" fill="#0a172a"/>
+      <path d="M252 480c110-24 176 13 264 18 105 6 192-44 289-29 64 10 106 33 143 48v39H252z" fill="#07111f" opacity=".76"/>
+      <ellipse cx="596" cy="343" rx="158" ry="57" fill="url(#whale)" transform="rotate(-8 596 343)"/>
+      <path d="M456 335c-51-48-95-35-128-5 49 3 76 28 100 55z" fill="#66c5fa"/>
+      <path d="M696 324c46-39 85-26 110 4-37-1-63 19-82 49z" fill="#93eaff"/>
+      <path d="M590 375c30 40 70 41 95 15-39 2-61-14-78-34z" fill="#526fd2"/>
+      <circle cx="668" cy="324" r="4.2" fill="#08111f"/>
+      <path d="M708 296c21-41 3-73-9-87 5 33-6 55-26 81" fill="none" stroke="#c5f6ff" stroke-width="7" stroke-linecap="round"/>
+      <circle cx="699" cy="211" r="9" fill="#dcfcff" opacity=".78"/><circle cx="718" cy="184" r="5" fill="#dcfcff" opacity=".6"/><circle cx="685" cy="168" r="4" fill="#dcfcff" opacity=".46"/>
+    </g>
+    <rect x="270" y="185" width="124" height="28" rx="14" fill="#07111f" fill-opacity=".72" stroke="#fff" stroke-opacity=".22"/>
+    <text x="289" y="204" fill="#eff8ff" font-size="11" font-weight="750" letter-spacing=".8">FINAL IMAGE</text>
+    <text x="252" y="589" fill="#242a35" font-size="14">A luminous blue whale drifting through a deep cinematic ocean…</text>
+    <text x="252" y="613" fill="#7a8290" font-size="12">PNG · 1536 × 1024 · Saved to this session</text>
+    <line x1="252" x2="948" y1="636" y2="636" stroke="#e2e6ee"/>
+    <g transform="translate(252 652)"><rect width="108" height="34" rx="10" fill="#f1f4fa" stroke="#dce2ed"/><path d="M20 12v10m0 0-4-4m4 4 4-4M14 25h12" fill="none" stroke="#56657c" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><text x="40" y="22" fill="#334057" font-size="12.5" font-weight="700">Download</text></g>
+    <g transform="translate(372 652)"><rect width="128" height="34" rx="10" fill="#f1f4fa" stroke="#dce2ed"/><path d="M21 17a8 8 0 0 1 14 0 8 8 0 0 1-14 0Zm7 0h.01" fill="none" stroke="#56657c" stroke-width="1.7" stroke-linecap="round"/><text x="44" y="22" fill="#334057" font-size="12.5" font-weight="700">Open preview</text></g>
+  </g>
+  <rect x="863" y="704" width="235" height="30" rx="15" fill="#e5ebf7"/><text x="880" y="724" fill="#60708d" font-size="12.5" font-weight="650">Illustrative completed state</text>
+</svg>
