@@ -34,6 +34,7 @@ export interface ImageGenerationValue {
   model: string
   prompt: string
   image: ImageRefValue
+  referenceImage?: ImageRefValue
   size: string
   quality: ImageQuality
   outputFormat: ImageOutputFormat
@@ -54,6 +55,7 @@ export interface ImageReferenceValue {
   callId: string
   model: string
   image: ImageRefValue
+  referenceImage?: ImageRefValue
   size: string
   quality: ImageQuality
   outputFormat: ImageOutputFormat

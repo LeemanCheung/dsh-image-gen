@@ -111,6 +111,7 @@ The model calls `image_gen`. While it runs, the card shows the developing animat
 Tool options:
 
 - `prompt`: detailed generation instructions, 1–32,000 characters and at most 64,000 UTF-8 bytes.
+- `reference_image_path`: optional PNG, JPEG, or WebP path. It is validated and saved as a durable attachment, then sent to the API-key `/images/edits` endpoint. This mode needs `authMode: api-key`, or `auto` with an API-key fallback; Codex subscription requests do not accept image edits.
 - `size`: `auto` or arbitrary `WIDTHxHEIGHT` accepted by GPT Image 2: each edge divisible by 16, no edge above 3840, aspect ratio 1:3–3:1, and 655,360–8,294,400 total pixels.
 - `quality`: `auto`, `low`, `medium`, or `high`.
 - `output_format`: `png`, `jpeg`, or `webp` in API-key mode. Codex subscription mode currently returns PNG.
@@ -148,7 +149,7 @@ The bundle inserts the `image-gen` row with safe defaults. Override it in the se
 
 Create a DSH credential named by `apiKeyEnv` (default `OPENAI_API_KEY`) or export that environment variable before starting the DSH Host, then set `authMode: api-key`. Never put the secret in the profile patch.
 
-A custom `baseUrl` must expose `<baseUrl>/images/generations` and support either an OpenAI-compatible `data[0].b64_json` response or SSE `image_generation.partial_image` / `image_generation.completed` events carrying `b64_json`. It must be HTTPS outside loopback.
+A custom `baseUrl` must expose `<baseUrl>/images/generations` and, when `reference_image_path` is used, `<baseUrl>/images/edits`. Both endpoints return an OpenAI-compatible `data[0].b64_json` response; generations may instead stream SSE `image_generation.partial_image` / `image_generation.completed` events carrying `b64_json`. It must be HTTPS outside loopback.
 
 | Setting | Accepted range / behavior |
 | --- | --- |

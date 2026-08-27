@@ -1,17 +1,21 @@
 /** Host plugin: GPT Image 2 tool, progressive state, and durable image reads. */
 
+import { basename, extname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
 import Schema from '@deepseek-ai/schemastery'
 import { AttachmentId } from '@deepseek-ai/dsh-attachment'
 import type { ImageAttachmentRef } from '@deepseek-ai/dsh-attachment'
 import { credentialRef } from '@deepseek-ai/dsh-credentials'
 import { SessionId } from '@deepseek-ai/dsh-session'
+import type {} from '@deepseek-ai/dsh-fs'
 import { defineTool } from '@deepseek-ai/dsh-tools'
+import type { ToolExecution } from '@deepseek-ai/dsh-tools'
 import type {} from '@deepseek-ai/dsh-client-connection'
 import type {} from '@deepseek-ai/dsh-session-persistence'
 import { CODEX_IMAGE_BASE_URL, resolveCodexSubscriptionAuth } from './codex.ts'
 import {
   ImageApiError,
+  type ImageGenerationInput,
   OpenAIImageClient,
   imageApiBaseUrl,
   imageSize,
@@ -24,6 +28,7 @@ import {
   RESULT_SCHEMA,
   type ImageBackground,
   type ImageGenerationValue,
+  type ImageMediaType,
   type ImageOutputFormat,
   type ImagePartialValue,
   type ImagePresentationValue,
@@ -94,6 +99,7 @@ interface ImageArguments {
   output_format?: ImageOutputFormat
   output_compression?: number
   background?: ImageBackground
+  reference_image_path?: string
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -134,6 +140,34 @@ function extension(format: ImageOutputFormat): string {
   return format === 'jpeg' ? 'jpg' : format
 }
 
+function referenceMediaType(filePath: string): ImageMediaType | undefined {
+  switch (extname(filePath).toLowerCase()) {
+    case '.png': return 'image/png'
+    case '.jpg':
+    case '.jpeg': return 'image/jpeg'
+    case '.webp': return 'image/webp'
+    default: return undefined
+  }
+}
+
+async function referenceImageFromPath(ctx: Context, exec: ToolExecution, filePath: string): Promise<{ input: ImageGenerationInput, ref: ImageRefValue }> {
+  const fs = ctx.get('fs')
+  if (fs === undefined) throw new Error('reference_image_path requires a DSH filesystem provider')
+  const mediaType = referenceMediaType(filePath)
+  if (mediaType === undefined) throw new Error('reference_image_path must name a PNG, JPEG, or WebP image')
+  const cwd = exec.agent?.session.header.cwd
+  const target = await fs.resolve(filePath, { ...(cwd === undefined ? {} : { cwd }), signal: exec.signal })
+  const info = await fs.stat(target, exec.signal)
+  if (info === undefined || info.type !== 'file') throw new Error(`reference_image_path cannot read "${filePath}" as a regular file`)
+  const data = await fs.readBytes(target, exec.signal, ctx.attachments.imageLimits.maxImageBytes)
+  const saved = await ctx.attachments.saveImage({ data, mediaType, name: basename(filePath) })
+  const stored = await ctx.attachments.readImage(saved, exec.signal)
+  return {
+    input: { data: stored.data, mediaType: stored.ref.mediaType as ImageMediaType, name: stored.ref.name ?? basename(filePath) },
+    ref: imageRefValue(stored.ref),
+  }
+}
+
 function promptName(prompt: string, format: ImageOutputFormat): string {
   const stem = prompt
     .normalize('NFKD')
@@ -167,6 +201,7 @@ function referenceValue(value: ImageGenerationValue): ImageReferenceValue {
     callId: value.callId,
     model: value.model,
     image: value.image,
+    ...(value.referenceImage === undefined ? {} : { referenceImage: value.referenceImage }),
     size: value.size,
     quality: value.quality,
     outputFormat: value.outputFormat,
@@ -251,12 +286,15 @@ export function apply(ctx: Context, config: Config): void {
     inFlight.add(settled)
     void settled.finally(() => { inFlight.delete(settled) })
   }
-  const resolveImageAuth = async (signal: AbortSignal): Promise<
+  const resolveImageAuth = async (signal: AbortSignal, needsReference: boolean): Promise<
     | { kind: 'codex-subscription'; apiKey: string; accountId: string }
     | { kind: 'api-key'; apiKey: string }
   > => {
+    if (needsReference && config.authMode === 'codex-subscription') {
+      throw new Error('reference_image_path requires authMode auto with an API key fallback, or authMode api-key')
+    }
     let codexError: unknown
-    if (config.authMode !== 'api-key') {
+    if (!needsReference && config.authMode !== 'api-key') {
       try {
         const auth = await resolveCodexSubscriptionAuth(signal, undefined, undefined, undefined, trackBackgroundWork)
         return { kind: 'codex-subscription', apiKey: auth.accessToken, accountId: auth.accountId }
@@ -320,12 +358,16 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'image_gen',
-    description: 'Generate one new image with OpenAI GPT Image 2 using the signed-in Codex subscription by default, with API-key fallback when configured. Use this when the user asks to create, draw, render, illustrate, or design an image. The result appears in an animated DSH image card with preview and download. GPT Image 2 does not support transparent backgrounds.',
+    description: 'Generate one new image with OpenAI GPT Image 2 using the signed-in Codex subscription by default, with API-key fallback when configured. Set reference_image_path to make an API-key image edit from a PNG, JPEG, or WebP reference. Use this when the user asks to create, draw, render, illustrate, or design an image. The result appears in an animated DSH image card with preview and download. GPT Image 2 does not support transparent backgrounds.',
     parameters: {
       prompt: {
         type: 'string',
         required: true,
         description: 'Detailed image prompt. Preserve user constraints and describe subject, composition, style, lighting, palette, text, and exclusions as relevant.',
+      },
+      reference_image_path: {
+        type: 'string',
+        description: 'Optional PNG, JPEG, or WebP reference path. Uses the API-key image-edit endpoint, preserves the reference as a durable attachment, and cannot run through a Codex subscription.',
       },
       size: {
         type: 'string',
@@ -364,6 +406,18 @@ export function apply(ctx: Context, config: Config): void {
             type: 'object',
             additionalProperties: false,
             required: true,
+            properties: {
+              attachmentId: { type: 'string', required: true },
+              mediaType: { type: 'string', enum: ['image/png', 'image/jpeg', 'image/webp'], required: true },
+              bytes: { type: 'integer', required: true },
+              width: { type: 'integer', required: true },
+              height: { type: 'integer', required: true },
+              name: { type: 'string' },
+            },
+          },
+          referenceImage: {
+            type: 'object',
+            additionalProperties: false,
             properties: {
               attachmentId: { type: 'string', required: true },
               mediaType: { type: 'string', enum: ['image/png', 'image/jpeg', 'image/webp'], required: true },
@@ -417,6 +471,10 @@ export function apply(ctx: Context, config: Config): void {
       if (stopping) throw new DOMException('dsh-image-gen is stopping', 'AbortError')
       const prompt = args.prompt.trim()
       if (prompt.length === 0 || prompt.length > 32_000) throw new Error('prompt must contain 1–32000 characters')
+      const referenceImagePath = args.reference_image_path === undefined ? undefined : args.reference_image_path.trim()
+      if (referenceImagePath !== undefined && (referenceImagePath.length === 0 || referenceImagePath.length > 4_096)) {
+        throw new Error('reference_image_path must contain 1–4096 characters')
+      }
       const size = imageSize(args.size ?? config.defaultSize)
       const quality = args.quality ?? config.defaultQuality
       const outputFormat = args.output_format ?? config.defaultOutputFormat
@@ -447,7 +505,9 @@ export function apply(ctx: Context, config: Config): void {
       const requestSignal = AbortSignal.any([lifetime.signal, exec.signal, AbortSignal.timeout(config.requestTimeoutMs)])
 
       try {
-        const auth = await resolveImageAuth(requestSignal)
+        const auth = await resolveImageAuth(requestSignal, referenceImagePath !== undefined)
+        requestSignal.throwIfAborted()
+        const reference = referenceImagePath === undefined ? undefined : await referenceImageFromPath(ctx, exec, referenceImagePath)
         requestSignal.throwIfAborted()
         const requestOutputFormat = auth.kind === 'codex-subscription' && args.output_format === undefined ? 'png' : outputFormat
         if (auth.kind === 'codex-subscription' && requestOutputFormat !== 'png') {
@@ -476,6 +536,7 @@ export function apply(ctx: Context, config: Config): void {
           outputFormat: requestOutputFormat,
           ...(requestOutputFormat === 'png' ? {} : { outputCompression }),
           background: args.background ?? config.defaultBackground,
+          ...(reference === undefined ? {} : { referenceImage: reference.input }),
         }, requestSignal, (progress) => {
           entry.revision += 1
           entry.attempt = progress.attempt
@@ -502,6 +563,7 @@ export function apply(ctx: Context, config: Config): void {
           model: requestModel,
           prompt,
           image: imageRefValue(ref),
+          ...(reference === undefined ? {} : { referenceImage: reference.ref }),
           size: generated.size,
           quality: generated.quality,
           outputFormat: generated.outputFormat,

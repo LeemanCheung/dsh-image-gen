@@ -53,15 +53,22 @@ function harness(options: {
     name: 'blue-whale.png',
   }))
   const readImage = vi.fn(async (ref: unknown) => ({ ref, data: new Uint8Array(Buffer.from('png-data')) }))
+  const fs = {
+    resolve: vi.fn(async (path: string) => ({ displayPath: path })),
+    stat: vi.fn(async () => ({ type: 'file' })),
+    readBytes: vi.fn(async () => new Uint8Array(Buffer.from('png-data'))),
+  }
   const logger = { warn: vi.fn() }
   const ctx = {
     tools: { register: vi.fn((next: ToolDefinition) => { definition = next; return () => {} }) },
     attachments: { imageLimits: { maxImageBytes: 1024 }, saveImage, readImage },
+    fs,
     credentials: { resolve: vi.fn(async () => options.resolveCredential === undefined
       ? options.credential === null ? undefined : ({ ref: 'OPENAI_API_KEY', value: options.credential ?? 'secret-key', source: 'test' })
       : options.resolveCredential()) },
     connection: { rpc: { handle: vi.fn((_channel, handler) => { rpcHandler = handler; return async () => {} }) } },
     sessionPersistence: { inspect: vi.fn(async (sessionId: unknown) => ({ events: String(sessionId) === 'session-1' ? events : [] })) },
+    get: (name: string) => name === 'fs' ? fs : undefined,
     logger,
     effect: vi.fn((install: () => (() => void | Promise<void>)) => {
       cleanups.push(install())
@@ -75,6 +82,7 @@ function harness(options: {
     rpcHandler,
     saveImage,
     readImage,
+    fs,
     logger,
     setEvents(next: unknown[]) { events = next },
     async dispose() {
@@ -128,6 +136,25 @@ describe('Host image generation plugin', () => {
     const nestedExec = { ...execution(), parent: Symbol('parent') }
     expect(definition.finalizeContent?.(nestedExec as ToolRunContext, { isError: false, value, content: content ?? [] })).toBeUndefined()
     expect(logger.warn).not.toHaveBeenCalled()
+  })
+
+  it('reads and persists a reference image before calling the API-key edit endpoint', async () => {
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input, init) => {
+      expect(String(input)).toBe('https://api.openai.com/v1/images/edits')
+      expect(init?.body).toBeInstanceOf(FormData)
+      const image = (init?.body as FormData).get('image')
+      expect(Buffer.from(await (image as Blob).arrayBuffer())).toEqual(Buffer.from('png-data'))
+      return new Response(JSON.stringify({ data: [{ b64_json: Buffer.from('edited-png').toString('base64') }] }), {
+        headers: { 'content-type': 'application/json' },
+      })
+    }))
+    const { definition, fs, saveImage } = harness()
+    if (definition.execute === undefined) throw new Error('missing tool body')
+    const value = await definition.execute({ prompt: 'Animate this whale', reference_image_path: 'assets/minke.png' }, execution())
+    expect(fs.resolve).toHaveBeenCalledWith('assets/minke.png', { cwd: 'C:\\workspace', signal: expect.any(AbortSignal) })
+    expect(fs.readBytes).toHaveBeenCalledOnce()
+    expect(saveImage).toHaveBeenCalledTimes(2)
+    expect(value).toMatchObject({ referenceImage: { mediaType: 'image/png' } })
   })
 
   it('authorizes durable bytes from native metadata and Code Mode markers', async () => {

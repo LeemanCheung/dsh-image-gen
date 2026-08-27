@@ -111,6 +111,7 @@ dsh plugin --profile web add .
 工具参数：
 
 - `prompt`：详细提示词，1–32,000 个字符，且不超过 64,000 个 UTF-8 字节。
+- `reference_image_path`：可选 PNG、JPEG 或 WebP 路径。插件会校验并保存为持久附件，再发送至 API Key 模式的 `/images/edits` 端点。该模式需要 `authMode: api-key`，或带 API Key 回退的 `auto`；Codex 订阅请求不接受图片编辑。
 - `size`：`auto` 或 GPT Image 2 支持的任意 `宽x高`；两边必须能被 16 整除，单边不超过 3840，宽高比在 1:3–3:1，总像素为 655,360–8,294,400。
 - `quality`：`auto`、`low`、`medium` 或 `high`。
 - `output_format`：API Key 模式支持 `png`、`jpeg` 或 `webp`；Codex 订阅模式当前返回 PNG。
@@ -148,7 +149,7 @@ Bundle 默认插入 `image-gen` 行。可以在所选 profile 的 `cordis.patch.
 
 在 DSH 凭据管理中创建名称与 `apiKeyEnv` 相同的凭据（默认 `OPENAI_API_KEY`），或在启动 DSH Host 前导出该环境变量，然后设置 `authMode: api-key`。不要把 secret 写入 profile patch。
 
-自定义 `baseUrl` 必须提供 `<baseUrl>/images/generations`，并支持 OpenAI 兼容的 `data[0].b64_json` 非流式响应，或携带 `b64_json` 的 SSE `image_generation.partial_image` / `image_generation.completed` 事件。除回环地址外必须使用 HTTPS。
+自定义 `baseUrl` 必须提供 `<baseUrl>/images/generations`；使用 `reference_image_path` 时还必须提供 `<baseUrl>/images/edits`。两个端点都需支持 OpenAI 兼容的 `data[0].b64_json` 非流式响应；generations 端点也可使用携带 `b64_json` 的 SSE `image_generation.partial_image` / `image_generation.completed` 事件。除回环地址外必须使用 HTTPS。
 
 | 配置 | 范围 / 行为 |
 | --- | --- |

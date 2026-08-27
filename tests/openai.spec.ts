@@ -144,6 +144,34 @@ describe('OpenAI image transport', () => {
     })).toThrow('first-party Codex endpoint')
   })
 
+  it('sends a reference image through the API-key edit endpoint as multipart data', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
+      expect(String(input)).toBe('https://api.openai.com/v1/images/edits')
+      expect(init?.headers).toMatchObject({ accept: 'application/json', authorization: 'Bearer test-secret' })
+      expect(init?.headers).not.toHaveProperty('content-type')
+      expect(init?.body).toBeInstanceOf(FormData)
+      const body = init?.body as FormData
+      expect(body.get('model')).toBe('gpt-image-2')
+      expect(body.get('prompt')).toBe(request.prompt)
+      expect(body.get('size')).toBe('1024x1024')
+      const image = body.get('image')
+      expect(image).toBeInstanceOf(Blob)
+      expect(Buffer.from(await (image as Blob).arrayBuffer())).toEqual(Buffer.from('reference-png'))
+      return new Response(JSON.stringify({
+        data: [{ b64_json: Buffer.from('edited-image').toString('base64') }],
+        output_format: 'png',
+        size: '1024x1024',
+        quality: 'medium',
+        background: 'opaque',
+      }), { headers: { 'content-type': 'application/json' } })
+    })
+    const generated = await client(fetchImpl).generate({
+      ...request,
+      referenceImage: { data: new Uint8Array(Buffer.from('reference-png')), mediaType: 'image/png', name: 'minke.png' },
+    }, new AbortController().signal, () => {})
+    expect(Buffer.from(generated.data).toString()).toBe('edited-image')
+  })
+
   it('cancels an unfinished SSE body after the completed event', async () => {
     const encoder = new TextEncoder()
     const cancelled = vi.fn()

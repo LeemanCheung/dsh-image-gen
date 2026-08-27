@@ -3,6 +3,7 @@
 import { CODEX_IMAGE_BASE_URL } from './codex.ts'
 import type {
   ImageBackground,
+  ImageMediaType,
   ImageOutputFormat,
   ImageQuality,
   ImageUsageValue,
@@ -21,6 +22,14 @@ export interface GenerateImageRequest {
   outputFormat: ImageOutputFormat
   outputCompression?: number
   background: ImageBackground
+  referenceImage?: ImageGenerationInput
+}
+
+/** One already-validated image supplied to the GPT Image edit endpoint. */
+export interface ImageGenerationInput {
+  data: Uint8Array
+  mediaType: ImageMediaType
+  name: string
 }
 
 /** Final bytes and provider facts from a completed stream. */
@@ -370,9 +379,24 @@ function wait(ms: number, signal: AbortSignal): Promise<void> {
   })
 }
 
+function imageEditBody(options: OpenAIImageClientOptions, request: GenerateImageRequest, reference: ImageGenerationInput): FormData {
+  const body = new FormData()
+  body.append('model', options.model)
+  body.append('prompt', request.prompt)
+  body.append('size', request.size)
+  body.append('quality', request.quality)
+  body.append('background', request.background)
+  body.append('output_format', request.outputFormat)
+  if (request.outputFormat !== 'png' && request.outputCompression !== undefined) body.append('output_compression', String(request.outputCompression))
+  body.append('moderation', options.moderation)
+  body.append('image', new Blob([Buffer.from(reference.data)], { type: reference.mediaType }), reference.name)
+  return body
+}
+
 /** Direct Image API client with redirect rejection and bounded retries. */
 export class OpenAIImageClient {
-  private readonly endpoint: string
+  private readonly generationEndpoint: string
+  private readonly editEndpoint: string
   private readonly fetchImpl: typeof fetch
   private readonly protocol: 'openai-api' | 'codex-subscription'
 
@@ -388,7 +412,8 @@ export class OpenAIImageClient {
         throw new TypeError('Codex subscription mode requires a valid image turn id')
       }
     }
-    this.endpoint = `${baseUrl}/images/generations`
+    this.generationEndpoint = `${baseUrl}/images/generations`
+    this.editEndpoint = `${baseUrl}/images/edits`
     this.fetchImpl = options.fetchImpl ?? fetch
   }
 
@@ -398,25 +423,32 @@ export class OpenAIImageClient {
     signal: AbortSignal,
     onProgress: (progress: GenerateImageProgress) => void,
   ): Promise<GeneratedImage> {
-    const body = JSON.stringify({
-      model: this.options.model,
-      prompt: request.prompt,
-      size: request.size,
-      quality: request.quality,
-      background: request.background,
-      n: 1,
-      ...this.protocol === 'codex-subscription'
-        ? {}
-        : {
-            output_format: request.outputFormat,
-            ...request.outputFormat === 'png' || request.outputCompression === undefined
-              ? {}
-              : { output_compression: request.outputCompression },
-            moderation: this.options.moderation,
-            stream: true,
-            partial_images: this.options.partialImages,
-          },
-    })
+    const reference = request.referenceImage
+    if (reference !== undefined && this.protocol === 'codex-subscription') {
+      throw new ImageApiError('Reference-image generation requires API-key mode because the Codex subscription endpoint does not accept image edits.')
+    }
+    const body = reference === undefined
+      ? JSON.stringify({
+          model: this.options.model,
+          prompt: request.prompt,
+          size: request.size,
+          quality: request.quality,
+          background: request.background,
+          n: 1,
+          ...this.protocol === 'codex-subscription'
+            ? {}
+            : {
+                output_format: request.outputFormat,
+                ...request.outputFormat === 'png' || request.outputCompression === undefined
+                  ? {}
+                  : { output_compression: request.outputCompression },
+                moderation: this.options.moderation,
+                stream: true,
+                partial_images: this.options.partialImages,
+              },
+        })
+      : imageEditBody(this.options, request, reference)
+    const endpoint = reference === undefined ? this.generationEndpoint : this.editEndpoint
 
     let lastError: unknown
     for (let attempt = 1; attempt <= this.options.maxRetries + 1; attempt += 1) {
@@ -424,13 +456,13 @@ export class OpenAIImageClient {
       onProgress({ kind: 'requesting', attempt })
       let response: Response | undefined
       try {
-        response = await this.fetchImpl(this.endpoint, {
+        response = await this.fetchImpl(endpoint, {
           method: 'POST',
           redirect: 'error',
           headers: {
-            accept: this.protocol === 'codex-subscription' ? 'application/json' : 'text/event-stream',
+            accept: reference === undefined && this.protocol !== 'codex-subscription' ? 'text/event-stream' : 'application/json',
             authorization: `Bearer ${this.options.apiKey}`,
-            'content-type': 'application/json',
+            ...reference === undefined ? { 'content-type': 'application/json' } : {},
             ...this.protocol === 'codex-subscription'
               ? {
                   'chatgpt-account-id': this.options.accountId!,
