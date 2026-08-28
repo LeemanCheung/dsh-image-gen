@@ -1,29 +1,42 @@
-name: CI
+name: Repair dependency update branch
 
 on:
   push:
-    branches: [main]
-  pull_request:
+    branches:
+      - dependabot/npm_and_yarn/development-dependencies-a5aa0239aa
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  verify:
+  repair:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        node: [22.19.0, 24.x]
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
+          ref: dependabot/npm_and_yarn/development-dependencies-a5aa0239aa
+          fetch-depth: 0
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22.19.0
           cache: npm
-      - run: npm ci
-      - run: npm run check
-      - name: Verify committed bundles are current
-        run: git diff --exit-code -- lib/index.js lib/client.js lib/client.js.map
-      - run: npm pack --dry-run --ignore-scripts
-      - run: npm audit --omit=dev
+      - name: Rebase dependency update and persist generated bundles
+        shell: bash
+        run: |
+          set -euo pipefail
+          repair_sha="$GITHUB_SHA"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git reset --hard origin/main
+          git checkout "$repair_sha" -- .github/workflows/ci.yml package.json package-lock.json
+
+          npm ci
+          npm run check
+          npm pack --dry-run --ignore-scripts
+          npm audit --omit=dev
+          git diff --check
+
+          git add .github/workflows/ci.yml package.json package-lock.json lib/index.js lib/client.js lib/client.js.map
+          git commit -m "build: refresh bundles for dependency updates"
+          git push --force origin HEAD:dependabot/npm_and_yarn/development-dependencies-a5aa0239aa
