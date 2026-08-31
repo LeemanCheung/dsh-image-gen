@@ -7,8 +7,9 @@ export const REFERENCE_MARKER = 'DSH_IMAGE_REF_V1 ' as const
 
 export type ImageQuality = 'auto' | 'low' | 'medium' | 'high'
 export type ImageOutputFormat = 'png' | 'jpeg' | 'webp'
-export type ImageBackground = 'auto' | 'opaque'
+export type ImageBackground = 'auto' | 'opaque' | 'transparent'
 export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp'
+export type ImageMetadataSource = 'provider' | 'request'
 
 /** JSON-safe copy of a DSH durable image reference. */
 export interface ImageRefValue {
@@ -37,6 +38,10 @@ export interface ImageGenerationValue {
   referenceImage?: ImageRefValue
   size: string
   quality: ImageQuality
+  requestedSize?: string
+  requestedQuality?: ImageQuality
+  providerSize?: string
+  qualitySource?: ImageMetadataSource
   outputFormat: ImageOutputFormat
   background: ImageBackground
   elapsedMs: number
@@ -58,6 +63,10 @@ export interface ImageReferenceValue {
   referenceImage?: ImageRefValue
   size: string
   quality: ImageQuality
+  requestedSize?: string
+  requestedQuality?: ImageQuality
+  providerSize?: string
+  qualitySource?: ImageMetadataSource
   outputFormat: ImageOutputFormat
   background: ImageBackground
   elapsedMs: number

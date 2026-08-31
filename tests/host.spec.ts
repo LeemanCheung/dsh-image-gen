@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
-import type { ToolDefinition, ToolRunContext } from '@deepseek-ai/dsh-tools'
+import type { PreToolDecision, ToolDefinition, ToolExecution, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { apply, inject, type Config } from '../src/index.ts'
 import { IMAGE_GEN_RPC_ENDPOINT } from '../src/rpc.ts'
 import { PRESENTATION_SCHEMA, REFERENCE_MARKER, RESULT_SCHEMA } from '../src/types.ts'
@@ -41,6 +41,7 @@ function harness(options: {
   config?: Partial<Config>
 } = {}) {
   let definition: ToolDefinition | undefined
+  let preExecute: ((execution: ToolExecution, next: () => Promise<PreToolDecision>) => Promise<PreToolDecision>) | undefined
   let rpcHandler: ((endpoint: string, payload: unknown, signal: AbortSignal) => Promise<unknown>) | undefined
   let events: unknown[] = []
   const cleanups: Array<() => void | Promise<void>> = []
@@ -53,6 +54,13 @@ function harness(options: {
     name: 'blue-whale.png',
   }))
   const readImage = vi.fn(async (ref: unknown) => ({ ref, data: new Uint8Array(Buffer.from('png-data')) }))
+  const validateImage = vi.fn(async () => {})
+  const saveImages = vi.fn(async (inputs: readonly unknown[]) => {
+    const refs = []
+    for (const input of inputs) await validateImage(input)
+    for (const input of inputs) refs.push(await saveImage(input))
+    return refs
+  })
   const fs = {
     resolve: vi.fn(async (path: string) => ({ displayPath: path })),
     stat: vi.fn(async () => ({ type: 'file' })),
@@ -61,7 +69,7 @@ function harness(options: {
   const logger = { warn: vi.fn() }
   const ctx = {
     tools: { register: vi.fn((next: ToolDefinition) => { definition = next; return () => {} }) },
-    attachments: { imageLimits: { maxImageBytes: 1024 }, saveImage, readImage },
+    attachments: { imageLimits: { maxImageBytes: 1024 }, validateImage, saveImages, saveImage, readImage },
     fs,
     credentials: { resolve: vi.fn(async () => options.resolveCredential === undefined
       ? options.credential === null ? undefined : ({ ref: 'OPENAI_API_KEY', value: options.credential ?? 'secret-key', source: 'test' })
@@ -70,18 +78,27 @@ function harness(options: {
     sessionPersistence: { inspect: vi.fn(async (sessionId: unknown) => ({ events: String(sessionId) === 'session-1' ? events : [] })) },
     get: (name: string) => name === 'fs' ? fs : undefined,
     logger,
+    on: vi.fn((event: string, listener: unknown) => {
+      if (event === 'tools/pre-execute') {
+        preExecute = listener as typeof preExecute
+      }
+      return () => {}
+    }),
     effect: vi.fn((install: () => (() => void | Promise<void>)) => {
       cleanups.push(install())
       return () => {}
     }),
   } as unknown as Context
   apply(ctx, { ...config, ...options.config })
-  if (definition === undefined || rpcHandler === undefined) throw new Error('plugin did not register')
+  if (definition === undefined || rpcHandler === undefined || preExecute === undefined) throw new Error('plugin did not register')
   return {
     definition,
+    preExecute,
     rpcHandler,
     saveImage,
+    saveImages,
     readImage,
+    validateImage,
     fs,
     logger,
     setEvents(next: unknown[]) { events = next },
@@ -138,7 +155,40 @@ describe('Host image generation plugin', () => {
     expect(logger.warn).not.toHaveBeenCalled()
   })
 
-  it('reads and persists a reference image before calling the API-key edit endpoint', async () => {
+  it('requires one-time approval before reading or uploading a reference path', async () => {
+    const { preExecute, fs, saveImage, validateImage } = harness()
+    const next = vi.fn(async (): Promise<PreToolDecision> => ({ kind: 'allow' }))
+    const decision = await preExecute({
+      ...execution(),
+      arguments: { prompt: 'Edit this whale', reference_image_path: `  private/minke.png${' '.repeat(4_096)}` },
+    } as ToolExecution, next)
+
+    expect(decision).toEqual({
+      kind: 'ask',
+      reason: 'Upload reference image "minke.png" to https://api.openai.com for this image edit.',
+    })
+    expect(next).not.toHaveBeenCalled()
+    expect(fs.resolve).not.toHaveBeenCalled()
+    expect(validateImage).not.toHaveBeenCalled()
+    expect(saveImage).not.toHaveBeenCalled()
+
+    expect(await preExecute({
+      ...execution('call-invalid'),
+      arguments: { prompt: 'Edit this whale', reference_image_path: 'x'.repeat(4_097) },
+    } as ToolExecution, next)).toEqual({
+      kind: 'deny',
+      reason: 'reference_image_path must contain 1–4096 characters',
+    })
+    expect(next).not.toHaveBeenCalled()
+
+    expect(await preExecute({
+      ...execution('call-plain'),
+      arguments: { prompt: 'Generate a new whale' },
+    } as ToolExecution, next)).toEqual({ kind: 'allow' })
+    expect(next).toHaveBeenCalledOnce()
+  })
+
+  it('reads a reference for the API-key edit endpoint and batch-persists it only after success', async () => {
     vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (input, init) => {
       expect(String(input)).toBe('https://api.openai.com/v1/images/edits')
       expect(init?.body).toBeInstanceOf(FormData)
@@ -148,13 +198,82 @@ describe('Host image generation plugin', () => {
         headers: { 'content-type': 'application/json' },
       })
     }))
-    const { definition, fs, saveImage } = harness()
+    const { definition, fs, saveImage, saveImages, validateImage } = harness({ config: { authMode: 'auto' } })
     if (definition.execute === undefined) throw new Error('missing tool body')
     const value = await definition.execute({ prompt: 'Animate this whale', reference_image_path: 'assets/minke.png' }, execution())
     expect(fs.resolve).toHaveBeenCalledWith('assets/minke.png', { cwd: 'C:\\workspace', signal: expect.any(AbortSignal) })
     expect(fs.readBytes).toHaveBeenCalledOnce()
+    expect(validateImage).toHaveBeenCalledTimes(3)
+    expect(saveImages).toHaveBeenCalledOnce()
     expect(saveImage).toHaveBeenCalledTimes(2)
     expect(value).toMatchObject({ referenceImage: { mediaType: 'image/png' } })
+  })
+
+  it('keeps public-API-only transparent output off the private subscription endpoint', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    const { definition } = harness({ config: { authMode: 'codex-subscription' } })
+    if (definition.execute === undefined) throw new Error('missing tool body')
+
+    await expect(definition.execute({
+      prompt: 'A transparent whale icon',
+      background: 'transparent',
+      output_format: 'png',
+    }, execution())).rejects.toThrow('transparent background output requires authMode auto')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('does not persist a validated reference when the provider rejects the edit', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      error: { message: 'edit rejected', code: 'image_generation_user_error' },
+    }), { status: 400, headers: { 'content-type': 'application/json' } })))
+    const { definition, validateImage, saveImage } = harness()
+    if (definition.execute === undefined) throw new Error('missing tool body')
+
+    await expect(definition.execute({
+      prompt: 'Edit this whale',
+      reference_image_path: 'assets/minke.png',
+    }, execution())).rejects.toThrow('edit rejected')
+    expect(validateImage).toHaveBeenCalledOnce()
+    expect(saveImage).not.toHaveBeenCalled()
+  })
+
+  it('does not start batch writes when final-image validation fails after a successful edit', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({
+      data: [{ b64_json: Buffer.from('invalid-final-image').toString('base64') }],
+    }), { headers: { 'content-type': 'application/json' } })))
+    const { definition, validateImage, saveImages, saveImage } = harness()
+    validateImage.mockImplementation(async (input: unknown) => {
+      if ((input as { name?: string }).name !== 'minke.png') throw new Error('invalid final image')
+    })
+    if (definition.execute === undefined) throw new Error('missing tool body')
+
+    await expect(definition.execute({
+      prompt: 'Edit this whale',
+      reference_image_path: 'assets/minke.png',
+    }, execution())).rejects.toThrow('invalid final image')
+    expect(saveImages).toHaveBeenCalledOnce()
+    expect(saveImage).not.toHaveBeenCalled()
+  })
+
+  it('separates requested settings from validated output facts', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseFinal()))
+    const { definition } = harness()
+    if (definition.execute === undefined) throw new Error('missing tool body')
+    const value = await definition.execute({
+      prompt: 'A glass whale',
+      size: '1536x864',
+      quality: 'high',
+    }, execution())
+
+    expect(value).toMatchObject({
+      size: '1024x1024',
+      quality: 'medium',
+      requestedSize: '1536x864',
+      requestedQuality: 'high',
+      providerSize: '1024x1024',
+      qualitySource: 'provider',
+    })
   })
 
   it('authorizes durable bytes from native metadata and Code Mode markers', async () => {

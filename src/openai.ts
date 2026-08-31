@@ -4,6 +4,7 @@ import { CODEX_IMAGE_BASE_URL } from './codex.ts'
 import type {
   ImageBackground,
   ImageMediaType,
+  ImageMetadataSource,
   ImageOutputFormat,
   ImageQuality,
   ImageUsageValue,
@@ -36,7 +37,9 @@ export interface ImageGenerationInput {
 export interface GeneratedImage {
   data: Uint8Array
   size: string
+  sizeSource: ImageMetadataSource
   quality: ImageQuality
+  qualitySource: ImageMetadataSource
   outputFormat: ImageOutputFormat
   background: ImageBackground
   usage?: ImageUsageValue
@@ -136,8 +139,12 @@ function quality(value: unknown, fallback: ImageQuality): ImageQuality {
   return value === 'auto' || value === 'low' || value === 'medium' || value === 'high' ? value : fallback
 }
 
+function qualitySource(value: unknown): ImageMetadataSource {
+  return value === 'auto' || value === 'low' || value === 'medium' || value === 'high' ? 'provider' : 'request'
+}
+
 function background(value: unknown, fallback: ImageBackground): ImageBackground {
-  return value === 'auto' || value === 'opaque' ? value : fallback
+  return value === 'auto' || value === 'opaque' || value === 'transparent' ? value : fallback
 }
 
 function usage(value: unknown): ImageUsageValue | undefined {
@@ -344,7 +351,9 @@ function completedFromEvent(event: ProviderEvent, request: GenerateImageRequest,
   return {
     data: base64Bytes(event.b64_json, maximum),
     size: typeof event.size === 'string' ? event.size : request.size,
+    sizeSource: typeof event.size === 'string' ? 'provider' : 'request',
     quality: quality(event.quality, request.quality),
+    qualitySource: qualitySource(event.quality),
     outputFormat: outputFormat(event.output_format, request.outputFormat),
     background: background(event.background, request.background),
     ...(parsedUsage === undefined ? {} : { usage: parsedUsage }),
@@ -424,8 +433,13 @@ export class OpenAIImageClient {
     onProgress: (progress: GenerateImageProgress) => void,
   ): Promise<GeneratedImage> {
     const reference = request.referenceImage
-    if (reference !== undefined && this.protocol === 'codex-subscription') {
-      throw new ImageApiError('Reference-image generation requires API-key mode because the Codex subscription endpoint does not accept image edits.')
+    if (this.protocol === 'codex-subscription') {
+      if (reference !== undefined) {
+        throw new ImageApiError('Reference-image generation requires API-key mode because the Codex subscription endpoint does not accept image edits.')
+      }
+      if (request.outputFormat !== 'png' || request.outputCompression !== undefined || request.background === 'transparent') {
+        throw new ImageApiError('This output option requires API-key mode and cannot be sent to the Codex subscription endpoint.')
+      }
     }
     const body = reference === undefined
       ? JSON.stringify({
@@ -487,7 +501,9 @@ export class OpenAIImageClient {
           return {
             data: base64Bytes(value.data[0].b64_json, this.options.maxImageBytes),
             size: typeof value.size === 'string' ? value.size : request.size,
+            sizeSource: typeof value.size === 'string' ? 'provider' : 'request',
             quality: quality(value.quality, request.quality),
+            qualitySource: qualitySource(value.quality),
             outputFormat: outputFormat(value.output_format, request.outputFormat),
             background: background(value.background, request.background),
             ...(parsedUsage === undefined ? {} : { usage: parsedUsage }),

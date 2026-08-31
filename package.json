@@ -1,6 +1,6 @@
 {
   "name": "dsh-image-gen",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "GPT Image 2 generation through Codex subscriptions or API keys, with progressive previews for DeepSeek Harness",
   "keywords": [
     "deepseek-harness",

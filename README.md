@@ -79,7 +79,7 @@ Review third-party source before installation and pin release tags or commits. F
 ```powershell
 dsh plugin --profile web add dsh-codex-connect
 dsh openai-codex login
-dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.2.0
+dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.3.0
 ```
 
 For local development:
@@ -111,12 +111,14 @@ The model calls `image_gen`. While it runs, the card shows the developing animat
 Tool options:
 
 - `prompt`: detailed generation instructions, 1–32,000 characters and at most 64,000 UTF-8 bytes.
-- `reference_image_path`: optional PNG, JPEG, or WebP path. It is validated and saved as a durable attachment, then sent to the API-key `/images/edits` endpoint. This mode needs `authMode: api-key`, or `auto` with an API-key fallback; Codex subscription requests do not accept image edits.
+- `reference_image_path`: optional PNG, JPEG, or WebP path. DSH asks for one-time approval naming the file and upload origin before reading it. The bytes are validated without storage, sent only to the API-key `/images/edits` endpoint, and committed as a durable audit attachment only after the Provider succeeds. This mode needs `authMode: api-key`, or `auto` with an API-key fallback; the private Codex subscription endpoint is not treated as an edit API.
 - `size`: `auto` or arbitrary `WIDTHxHEIGHT` accepted by GPT Image 2: each edge divisible by 16, no edge above 3840, aspect ratio 1:3–3:1, and 655,360–8,294,400 total pixels.
 - `quality`: `auto`, `low`, `medium`, or `high`.
 - `output_format`: `png`, `jpeg`, or `webp` in API-key mode. Codex subscription mode currently returns PNG.
 - `output_compression`: 0–100 for API-key JPEG/WebP only.
-- `background`: `auto` or `opaque`. GPT Image 2 does not support transparent output.
+- `background`: `auto`, `opaque`, or `transparent`. Transparent output is a preview feature of the public Image API, requires API-key mode, and supports PNG/WebP but not JPEG.
+
+Completed results keep the request and result distinct. `size` is derived from the validated final image bytes; `requestedSize` / `requestedQuality` preserve the call settings. `qualitySource` says whether the displayed quality came from Provider metadata or is only the requested fallback.
 
 ## Configure
 
@@ -167,12 +169,12 @@ Codex subscription calls consume the image-generation allowance associated with 
 
 ## Data, network, and permissions
 
-- **Network:** subscription mode sends the prompt and supported options only to `https://chatgpt.com/backend-api/codex/images/generations`; API-key mode sends them to `baseUrl`.
+- **Network:** subscription mode sends the prompt and supported options only to `https://chatgpt.com/backend-api/codex/images/generations`; API-key mode sends them to `baseUrl`. An approved reference edit also uploads the validated reference bytes to that configured API origin.
 - **Credentials:** subscription mode asks `dsh-codex-connect` for its DSH-owned OAuth credential; API-key mode resolves the configured DSH credential reference. Neither secret is stored in plugin state, logs, metadata, or session history.
-- **Storage:** stores only completed images through the DSH attachment service. Partial frames stay in bounded Host memory while the call is active and are then discarded.
+- **Storage:** stores completed images through the DSH attachment service. A reference is validated in memory first and becomes durable only after its edit request succeeds. Partial frames stay in bounded Host memory while the call is active and are then discarded.
 - **Browser access:** uses a loopback-only private RPC. A final image is returned only after the Host finds the exact attachment reference in the requested session and call record.
-- **Workspace files:** does not read or write the session workspace.
-- **User data:** prompts and tool arguments follow DSH's normal session logging. OpenAI receives the prompt under the terms governing the selected ChatGPT subscription or API account.
+- **Workspace files:** does not write the session workspace. It reads a `reference_image_path` only after DSH records a one-time approval for that exact tool call.
+- **User data:** prompts and tool arguments follow DSH's normal session logging. The selected Provider receives the prompt and, only for an approved API-key edit, the reference image bytes under the terms governing that API account.
 
 ## Troubleshooting
 
@@ -231,7 +233,8 @@ The build emits:
 
 ## Known limitations
 
-- Version 0.2 generates new images. Codex-style reference-image editing is not yet exposed because a safe DSH attachment selector and explicit external-upload consent are needed.
+- Reference edits use a DSH filesystem path plus one-time external-upload approval. A dedicated attachment-picker UI remains future work; headless or `approval: never` sessions reject such uploads.
+- The ChatGPT Codex subscription endpoint is a private compatibility surface and is not documented as an Image API edit endpoint; this plugin keeps subscription reference edits and public-API-only output options disabled.
 - Final previews are intentionally loopback-only. Remote Web clients receive a clear unavailable state rather than image bytes.
 - Current DSH credential resolution and attachment saving do not accept cancellation signals. The plugin checks cancellation before and after those stages and waits for them during teardown, but cannot interrupt a provider implementation that stalls inside either service.
 - OpenAI may evolve arbitrary-size limits or event fields. The plugin fails closed on incompatible responses instead of guessing.

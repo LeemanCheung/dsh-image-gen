@@ -26,6 +26,7 @@ const POLL_MS = 650
 const en = {
   generating: 'Generating image',
   generated: 'Generated image',
+  edited: 'Edited image',
   failed: 'Image generation failed',
   requesting: 'Contacting GPT Image 2',
   rendering: 'Rendering pixels',
@@ -37,6 +38,8 @@ const en = {
   download: 'Download',
   close: 'Close',
   details: 'Prompt & details',
+  requested: 'Requested',
+  unverified: 'unverified',
   loading: 'Loading final image',
   unavailable: 'The generated image is unavailable. Reload the page or check Host logs.',
   noOutput: 'The provider did not return a usable image.',
@@ -47,6 +50,7 @@ type LocaleKey = keyof typeof en
 const zh: Record<LocaleKey, string> = {
   generating: '正在生成图片',
   generated: '图片已生成',
+  edited: '图片编辑已完成',
   failed: '图片生成失败',
   requesting: '正在连接 GPT Image 2',
   rendering: '正在渲染像素',
@@ -58,6 +62,8 @@ const zh: Record<LocaleKey, string> = {
   download: '下载',
   close: '关闭',
   details: '提示词与详情',
+  requested: '请求参数',
+  unverified: '未核验',
   loading: '正在加载最终图片',
   unavailable: '无法读取已生成图片。请刷新页面或查看 Host 日志。',
   noOutput: '服务未返回可用图片。',
@@ -145,8 +151,13 @@ function presentationOf(block: ToolCallBlock): ImagePresentationValue | undefine
       model: marker.model,
       prompt: args.prompt,
       image: marker.image,
+      ...(marker.referenceImage === undefined ? {} : { referenceImage: marker.referenceImage }),
       size: marker.size,
       quality: marker.quality,
+      ...(marker.requestedSize === undefined ? {} : { requestedSize: marker.requestedSize }),
+      ...(marker.requestedQuality === undefined ? {} : { requestedQuality: marker.requestedQuality }),
+      ...(marker.providerSize === undefined ? {} : { providerSize: marker.providerSize }),
+      ...(marker.qualitySource === undefined ? {} : { qualitySource: marker.qualitySource }),
       outputFormat: marker.outputFormat,
       background: marker.background,
       elapsedMs: marker.elapsedMs,
@@ -279,13 +290,23 @@ function ImageGenCard({ sessionId, callId, block, t, requestProgress, requestIma
           : settled && presentation !== undefined && !loadError
             ? t('loading')
             : t('waiting')
-  const title = failed ? t('failed') : settled ? t('generated') : t('generating')
+  const title = failed
+    ? t('failed')
+    : settled
+      ? result?.referenceImage === undefined ? t('generated') : t('edited')
+      : t('generating')
   const startedAt = progress?.startedAt || ('time' in block ? block.time : Date.now())
   const elapsed = result?.elapsedMs ?? Math.max(0, Date.now() - startedAt)
   const error = failed
     ? settled && block.isError ? resultError(block, t('noOutput')) : t('noOutput')
     : loadError ? t('unavailable') : ''
   const filename = result?.image.name ?? `gpt-image-2.${result?.outputFormat === 'jpeg' ? 'jpg' : result?.outputFormat ?? args.outputFormat}`
+  const sizeLabel = result === undefined ? args.size : `${result.image.width}x${result.image.height}`
+  const qualityLabel = result === undefined
+    ? args.quality
+    : result.qualitySource === 'provider'
+      ? result.quality
+      : `${result.quality} (${result.qualitySource === 'request' ? t('requested').toLowerCase() : t('unverified')})`
 
   const download = (): void => {
     if (finalImage === undefined) return
@@ -316,8 +337,8 @@ function ImageGenCard({ sessionId, callId, block, t, requestProgress, requestIma
       <footer className="dshImageGen__footer">
         <div className="dshImageGen__prompt">{prompt || title}</div>
         <div className="dshImageGen__meta">
-          <span className="dshImageGen__chip">{result?.size ?? args.size}</span>
-          <span className="dshImageGen__chip">{result?.quality ?? args.quality}</span>
+          <span className="dshImageGen__chip">{sizeLabel}</span>
+          <span className="dshImageGen__chip">{qualityLabel}</span>
           <span className="dshImageGen__chip">{(result?.outputFormat ?? args.outputFormat).toUpperCase()}</span>
           {progress !== undefined && progress.attempt > 1 && <span className="dshImageGen__chip">attempt {progress.attempt}</span>}
           {finalImage !== undefined && (
@@ -330,6 +351,9 @@ function ImageGenCard({ sessionId, callId, block, t, requestProgress, requestIma
         <details className="dshImageGen__details">
           <summary>{t('details')}</summary>
           <p>{prompt}</p>
+          {result?.requestedSize !== undefined && result.requestedQuality !== undefined && (
+            <p>{`${t('requested')}: ${result.requestedSize} · ${result.requestedQuality}`}</p>
+          )}
           {result?.usage !== undefined && <p>{`${result.model} · ${result.usage.totalTokens} tokens · ${elapsedLabel(result.elapsedMs)}`}</p>}
         </details>
       </footer>

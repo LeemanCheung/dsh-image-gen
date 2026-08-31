@@ -22,8 +22,19 @@ const require = createRequire(import.meta.url)
 const client = descriptor.factory(require)
 assert.equal(typeof client.apply, 'function')
 assert.deepEqual([...client.inject], ['slots', 'locale', 'connection'])
+assert.match(source, /unverified/)
+
+const sourceMap = JSON.parse(await readFile(new URL('../lib/client.js.map', import.meta.url), 'utf8'))
+const clientSourceIndex = sourceMap.sources.findIndex(value => value.endsWith('../src/client/index.tsx'))
+assert.notEqual(clientSourceIndex, -1)
+const currentClientSource = await readFile(new URL('../src/client/index.tsx', import.meta.url), 'utf8')
+assert.equal(
+  sourceMap.sourcesContent[clientSourceIndex].replace(/\r\n?/g, '\n'),
+  currentClientSource.replace(/\r\n?/g, '\n'),
+)
 
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+assert.equal(manifest.version, '0.3.0')
 assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
 assert.equal(manifest.dsh.client.platform, 'web')
 assert.equal(manifest.exports['./client'].default, './lib/client.js')

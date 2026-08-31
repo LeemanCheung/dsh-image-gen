@@ -7,7 +7,7 @@ import type { ClientContext, ToolCallBlock } from '@deepseek-ai/dsh-client-runti
 import { apply } from '../src/client/index.tsx'
 import { IMAGE_GEN_RPC_ENDPOINT } from '../src/rpc.ts'
 import { IMAGE_GEN_STYLES } from '../src/client/styles.ts'
-import { PRESENTATION_SCHEMA, RESULT_SCHEMA } from '../src/types.ts'
+import { PRESENTATION_SCHEMA, REFERENCE_MARKER, REFERENCE_SCHEMA, RESULT_SCHEMA } from '../src/types.ts'
 
 afterEach(() => {
   cleanup()
@@ -36,12 +36,16 @@ const finalResult = {
     attachmentId: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
     mediaType: 'image/png' as const,
     bytes: 8,
-    width: 1024,
-    height: 1024,
+    width: 1672,
+    height: 941,
     name: 'blue-whale.png',
   },
-  size: '1024x1024',
-  quality: 'medium' as const,
+  size: '1672x941',
+  quality: 'low' as const,
+  requestedSize: '1536x864',
+  requestedQuality: 'high' as const,
+  providerSize: '1672x941',
+  qualitySource: 'provider' as const,
   outputFormat: 'png' as const,
   background: 'opaque' as const,
   elapsedMs: 4_200,
@@ -77,9 +81,9 @@ function card(rpc: (endpoint: string) => Promise<unknown>) {
   const locale = {
     register: vi.fn(() => () => {}),
     bind: vi.fn(() => (key: string) => ({
-      generating: 'Generating image', generated: 'Generated image', failed: 'Image generation failed',
+      generating: 'Generating image', generated: 'Generated image', edited: 'Edited image', failed: 'Image generation failed',
       requesting: 'Contacting GPT Image 2', rendering: 'Rendering pixels', saving: 'Saving final image', waiting: 'Preparing the canvas', ready: 'Final image saved',
-      draft: 'Live draft', preview: 'Preview', download: 'Download', close: 'Close', details: 'Prompt & details',
+      draft: 'Live draft', preview: 'Preview', download: 'Download', close: 'Close', details: 'Prompt & details', requested: 'Requested', unverified: 'unverified',
       loading: 'Loading final image', unavailable: 'Unavailable', noOutput: 'No output',
     } as Record<string, string>)[key] ?? key),
   }
@@ -138,12 +142,68 @@ describe('animated image card', () => {
     await waitFor(() => { expect(screen.getByRole('button', { name: 'Preview' })).toBeTruthy() })
     expect(screen.getByRole('img').getAttribute('src')).toBe('blob:final-image')
     expect(screen.getByText('Final image saved')).toBeTruthy()
+    expect(screen.getByText('1672x941')).toBeTruthy()
+    expect(screen.getByText('low')).toBeTruthy()
+    expect(screen.getByText('Requested: 1536x864 · high')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
     expect(screen.getByRole('dialog')).toBeTruthy()
     fireEvent.keyDown(document, { key: 'Escape' })
     await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
     unmount()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:final-image')
+    await registered.dispose()
+  })
+
+  it('preserves reference metadata in Code Mode fallback replay', async () => {
+    const referenceImage = {
+      ...finalResult.image,
+      attachmentId: 'sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb',
+      name: 'minke.png',
+    }
+    const marker = {
+      ...finalResult,
+      schema: REFERENCE_SCHEMA,
+      referenceImage,
+    }
+    const block = {
+      ...settled(),
+      meta: undefined,
+      content: [{ type: 'text' as const, text: `Generated.\n${REFERENCE_MARKER}${JSON.stringify(marker)}` }],
+    } as ToolCallBlock
+    const registered = card(async () => ({
+      attachment: finalResult.image,
+      data: Buffer.from('png-data').toString('base64'),
+    }))
+    render(<registered.Component {...registered.injected} sessionId={'session-1'} callId="call-1" toolName="image_gen" block={block} openFile={() => {}} />)
+
+    await waitFor(() => { expect(screen.getByText('Edited image')).toBeTruthy() })
+    expect(screen.getByText('Requested: 1536x864 · high')).toBeTruthy()
+    await registered.dispose()
+  })
+
+  it('uses attachment dimensions and marks legacy quality as unverified', async () => {
+    const legacy = {
+      ...finalResult,
+      size: 'auto',
+      quality: 'high' as const,
+      requestedSize: undefined,
+      requestedQuality: undefined,
+      providerSize: undefined,
+      qualitySource: undefined,
+    }
+    const block = {
+      ...settled(),
+      meta: { schema: PRESENTATION_SCHEMA, result: legacy },
+    } as ToolCallBlock
+    const registered = card(async () => ({
+      attachment: legacy.image,
+      data: Buffer.from('png-data').toString('base64'),
+    }))
+    render(<registered.Component {...registered.injected} sessionId={'session-1'} callId="call-1" toolName="image_gen" block={block} openFile={() => {}} />)
+
+    await waitFor(() => { expect(screen.getByText('1672x941')).toBeTruthy() })
+    expect(screen.getByText('high (unverified)')).toBeTruthy()
+    expect(screen.queryByText('auto')).toBeNull()
     await registered.dispose()
   })
 

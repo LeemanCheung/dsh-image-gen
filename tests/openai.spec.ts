@@ -101,6 +101,57 @@ describe('OpenAI image transport', () => {
     expect(Buffer.from(generated.data)).toEqual(image)
   })
 
+  it('labels missing response metadata as request fallback and sends transparent WebP options', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      expect(body).toMatchObject({
+        model: 'gpt-image-2',
+        size: '1024x1024',
+        quality: 'medium',
+        output_format: 'webp',
+        output_compression: 82,
+        background: 'transparent',
+      })
+      return new Response(JSON.stringify({
+        data: [{ b64_json: Buffer.from('transparent-image').toString('base64') }],
+      }), { headers: { 'content-type': 'application/json' } })
+    })
+    const generated = await client(fetchImpl).generate({
+      ...request,
+      outputFormat: 'webp',
+      outputCompression: 82,
+      background: 'transparent',
+    }, new AbortController().signal, () => {})
+
+    expect(generated).toMatchObject({
+      size: '1024x1024',
+      sizeSource: 'request',
+      quality: 'medium',
+      qualitySource: 'request',
+      outputFormat: 'webp',
+      background: 'transparent',
+    })
+  })
+
+  it('sends transparent PNG without a compression field through the public Image API', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      expect(body).toMatchObject({ output_format: 'png', background: 'transparent' })
+      expect(body).not.toHaveProperty('output_compression')
+      return new Response(JSON.stringify({
+        data: [{ b64_json: Buffer.from('transparent-png').toString('base64') }],
+        output_format: 'png',
+        background: 'transparent',
+      }), { headers: { 'content-type': 'application/json' } })
+    })
+
+    const generated = await client(fetchImpl).generate({
+      ...request,
+      background: 'transparent',
+    }, new AbortController().signal, () => {})
+    expect(generated).toMatchObject({ outputFormat: 'png', background: 'transparent' })
+  })
+
   it('uses the fixed Codex subscription endpoint without API-only streaming fields', async () => {
     const fetchImpl = vi.fn<typeof fetch>(async (input, init) => {
       expect(String(input)).toBe(`${CODEX_IMAGE_BASE_URL}/images/generations`)
@@ -142,6 +193,23 @@ describe('OpenAI image transport', () => {
       accountId: 'account-123',
       turnId: 'call-123',
     })).toThrow('first-party Codex endpoint')
+  })
+
+  it('rejects public-API-only output options before contacting the Codex subscription endpoint', async () => {
+    const fetchImpl = vi.fn<typeof fetch>()
+    const subscription = client(fetchImpl, {
+      baseUrl: CODEX_IMAGE_BASE_URL,
+      apiKey: 'oauth-secret',
+      protocol: 'codex-subscription',
+      accountId: 'account-123',
+      turnId: 'call-123',
+    })
+
+    await expect(subscription.generate({
+      ...request,
+      background: 'transparent',
+    }, new AbortController().signal, () => {})).rejects.toThrow('requires API-key mode')
+    expect(fetchImpl).not.toHaveBeenCalled()
   })
 
   it('sends a reference image through the API-key edit endpoint as multipart data', async () => {

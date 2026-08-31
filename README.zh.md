@@ -79,7 +79,7 @@ OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，通过订阅 OAu
 ```powershell
 dsh plugin --profile web add dsh-codex-connect
 dsh openai-codex login
-dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.2.0
+dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.3.0
 ```
 
 本地开发安装：
@@ -111,12 +111,14 @@ dsh plugin --profile web add .
 工具参数：
 
 - `prompt`：详细提示词，1–32,000 个字符，且不超过 64,000 个 UTF-8 字节。
-- `reference_image_path`：可选 PNG、JPEG 或 WebP 路径。插件会校验并保存为持久附件，再发送至 API Key 模式的 `/images/edits` 端点。该模式需要 `authMode: api-key`，或带 API Key 回退的 `auto`；Codex 订阅请求不接受图片编辑。
+- `reference_image_path`：可选 PNG、JPEG 或 WebP 路径。DSH 会在读取前显示文件名和上传目标，并要求本次调用的一次性授权；图片先在内存中校验，仅发送至 API Key 模式的 `/images/edits`，Provider 成功后才保存为审计附件。该模式需要 `authMode: api-key`，或带 API Key 回退的 `auto`；私有 Codex 订阅端点不作为图片编辑 API 使用。
 - `size`：`auto` 或 GPT Image 2 支持的任意 `宽x高`；两边必须能被 16 整除，单边不超过 3840，宽高比在 1:3–3:1，总像素为 655,360–8,294,400。
 - `quality`：`auto`、`low`、`medium` 或 `high`。
 - `output_format`：API Key 模式支持 `png`、`jpeg` 或 `webp`；Codex 订阅模式当前返回 PNG。
 - `output_compression`：仅用于 API Key 模式下 JPEG/WebP 的 0–100 压缩质量。
-- `background`：`auto` 或 `opaque`。GPT Image 2 不支持透明背景。
+- `background`：`auto`、`opaque` 或 `transparent`。透明背景是公开 Image API 的预览能力，只用于 API Key 模式，支持 PNG/WebP，不支持 JPEG。
+
+完成结果会分开记录请求和结果：`size` 来自最终图片字节的实际宽高；`requestedSize` / `requestedQuality` 保留调用参数；`qualitySource` 标明质量是 Provider 回报，还是仅为请求值回填。
 
 ## 配置
 
@@ -167,12 +169,12 @@ Codex 订阅调用会消耗已登录 ChatGPT 套餐对应的图片生成额度�
 
 ## 数据、网络和权限
 
-- **网络**：订阅模式只把提示词和受支持参数发送到 `https://chatgpt.com/backend-api/codex/images/generations`；API Key 模式发送到 `baseUrl`。
+- **网络**：订阅模式只把提示词和受支持参数发送到 `https://chatgpt.com/backend-api/codex/images/generations`；API Key 模式发送到 `baseUrl`。经用户批准的参考图编辑还会把已校验图片字节上传至该 API Origin。
 - **凭据**：订阅模式通过 `dsh-codex-connect` 获取由 DSH 管理的 OAuth 凭据；API Key 模式解析配置的 DSH 凭据引用。两种秘密都不会进入插件状态、日志、元数据或会话历史。
-- **存储**：只有最终成图会通过 DSH 附件服务保存。局部图只在调用期间保留于受限 Host 内存，随后丢弃。
+- **存储**：最终成图会通过 DSH 附件服务保存。参考图先在内存中校验，编辑请求成功后才持久化；局部图只在调用期间保留于受限 Host 内存，随后丢弃。
 - **浏览器访问**：使用仅回环可用的私有 RPC。Host 必须先在指定会话和调用记录中找到完全匹配的附件引用，才会返回最终图片。
-- **工作区文件**：不会读取或写入会话工作区。
-- **用户数据**：提示词和工具参数会遵循 DSH 的常规会话日志规则。OpenAI 会根据所选 ChatGPT 订阅或 API 账户适用的条款接收提示词。
+- **工作区文件**：不会写入会话工作区；只有 DSH 为该次工具调用记录一次性授权后，才会读取 `reference_image_path`。
+- **用户数据**：提示词和工具参数遵循 DSH 的常规会话日志规则。所选 Provider 会接收提示词；只有经批准的 API Key 编辑会额外上传参考图字节，适用该 API 账户的条款。
 
 ## 故障排查
 
@@ -231,7 +233,8 @@ npm pack --dry-run
 
 ## 已知限制
 
-- 0.2 版生成全新图片。参考图编辑尚未开放，因为这需要安全的 DSH 附件选择器和明确的外部上传授权。
+- 参考图编辑使用 DSH 文件路径并逐次请求外部上传授权。专用附件选择器仍是后续工作；无交互环境或 `approval: never` 会话会拒绝上传。
+- ChatGPT Codex 订阅端点属于私有兼容接口，官方并未把它描述为 Image API 编辑端点；插件继续禁用订阅参考编辑和仅公开 API 支持的输出参数。
 - 最终预览刻意限制为回环访问。远程 Web 客户端只会看到明确的不可用状态，不会收到图片字节。
 - 当前 DSH 凭据解析和附件保存服务不接收取消信号。插件会在这些阶段前后检查取消，并在卸载时等待它们结束，但无法中断卡死在服务内部的 Provider 实现。
 - OpenAI 可能调整任意尺寸限制或事件字段。遇到不兼容响应时，插件会安全失败，而不是猜测。

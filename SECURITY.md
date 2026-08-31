@@ -20,3 +20,5 @@ If private vulnerability reporting is temporarily unavailable, open a public iss
 - Final-image RPC reads are loopback-only and authorized against the exact session and call record.
 - Partial image bytes are bounded, kept only during an active call, and never written to session history.
 - Completed images are validated and stored by DSH's attachment service.
+- A local reference image is read only after the DSH approval service grants that exact `image_gen` call. The approval names the file and configured upload origin; `approval: never` and missing answerers fail closed.
+- Reference bytes are validated without persistence, sent only through the API-key edit route, and committed as an attachment only after the Provider succeeds. The private Codex subscription endpoint is never used for reference uploads.
