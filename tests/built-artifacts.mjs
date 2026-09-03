@@ -34,9 +34,18 @@ assert.equal(
 )
 
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
-assert.equal(manifest.version, '0.3.0')
+assert.equal(manifest.version, '0.3.1')
 assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
 assert.equal(manifest.dsh.client.platform, 'web')
+assert.deepEqual(manifest.dsh.compatibility, {
+  dsh: '>=0.1.0-rc.6 <0.2.0',
+  dshReleases: {
+    '0.1.2-alpha.3': 'unknown',
+    '0.1.2-alpha.4': 'unknown',
+    '0.1.2-alpha.5': 'compatible',
+  },
+  profiles: ['web'],
+})
 assert.equal(manifest.exports['./client'].default, './lib/client.js')
 
 console.log('built artifact smoke passed')

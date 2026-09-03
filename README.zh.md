@@ -64,13 +64,13 @@ OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，通过订阅 OAu
 
 已验证环境：
 
-- DeepSeek Harness `0.1.0-rc.6`
+- DeepSeek Harness `0.1.2-alpha.5`（一次性 Web Profile 安装、启动、HTTP 就绪与卸载）
 - `dsh-codex-connect` `0.1.0-alpha.4.4`
 - Node.js `24.15.0`（软件包支持：`^22.19.0` 或 `>=24.0.0`）
 - Windows 11 上的 DSH Web profile
 - 真实 Codex 订阅生图、持久回放、Blob 预览和下载控件
 
-验证日期：2026-08-15。
+`0.1.2-alpha.3` 与 `0.1.2-alpha.4` 的兼容性仍标记为 `unknown`；manifest 不会从宽泛版本范围推导运行证据。上面的真实 Codex 订阅生图验证于 2026-08-15 在 `0.1.0-rc.6` 完成；`0.1.2-alpha.5` 的一次性生命周期验证于 2026-09-03 完成，未发送 Provider 请求。
 
 ## 安装
 
@@ -79,7 +79,7 @@ OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，通过订阅 OAu
 ```powershell
 dsh plugin --profile web add dsh-codex-connect
 dsh openai-codex login
-dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.3.0
+dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.3.1
 ```
 
 本地开发安装：

@@ -62,15 +62,15 @@ Primary references:
 
 ## Compatibility
 
-Verified against:
+Verified environment:
 
-- DeepSeek Harness `0.1.0-rc.6`
+- DeepSeek Harness `0.1.2-alpha.5` (disposable Web profile install, startup, HTTP readiness, and uninstall)
 - `dsh-codex-connect` `0.1.0-alpha.4.4`
 - Node.js `24.15.0` (package support: `^22.19.0` or `>=24.0.0`)
 - DSH Web profile on Windows 11
 - Real Codex subscription generation, durable replay, Blob preview, and download controls
 
-Verification date: 2026-08-15.
+Compatibility for `0.1.2-alpha.3` and `0.1.2-alpha.4` remains `unknown`; the manifest does not infer runtime evidence from the declared range. The real Codex subscription generation check above was performed on `0.1.0-rc.6` on 2026-08-15. Disposable lifecycle verification for `0.1.2-alpha.5` was performed on 2026-09-03 without sending a provider request.
 
 ## Install
 
@@ -79,7 +79,7 @@ Review third-party source before installation and pin release tags or commits. F
 ```powershell
 dsh plugin --profile web add dsh-codex-connect
 dsh openai-codex login
-dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.3.0
+dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.3.1
 ```
 
 For local development:
