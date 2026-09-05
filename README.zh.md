@@ -64,14 +64,13 @@ OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，通过订阅 OAu
 
 已验证环境：
 
-- DeepSeek Harness `0.1.2-rc.1`（新版 Client 模块、渲染、工具卡与 Host API 的类型检查、确定性构建、测试和打包冒烟；真实 Profile 验收仍待完成）
-- DeepSeek Harness `0.1.2-alpha.5`（一次性 Web Profile 安装、启动、HTTP 就绪与卸载）
+- DeepSeek Harness `0.1.2-rc.1`（QA Web Profile 加载、插件启用、Host 注册 `image_gen`、Client 工具卡加载与历史成图卡片回放；同时通过类型检查、确定性构建、测试和打包冒烟）
 - `dsh-codex-connect` `0.1.0-alpha.4.4`
 - Node.js `24.15.0`（软件包支持：`^22.19.0` 或 `>=24.0.0`）
 - Windows 11 上的 DSH Web profile
 - 真实 Codex 订阅生图、持久回放、Blob 预览和下载控件
 
-`0.1.2-alpha.3`、`0.1.2-alpha.4` 与 `0.1.2-rc.1` 的真实运行兼容性仍标记为 `unknown`；manifest 不会从宽泛版本范围推导运行证据。`0.3.2` 已移除新版不存在的 `dsh-client-runtime`，并改用 `0.1.2-rc.1` 的连接、会话视图、渲染、语言和工具卡契约完成构建。上面的真实 Codex 订阅生图验证于 2026-08-15 在 `0.1.0-rc.6` 完成；`0.1.2-alpha.5` 的一次性生命周期验证于 2026-09-03 完成，未发送 Provider 请求。
+`0.3.2` 只声明支持 `0.1.2-rc.1`，不再沿用 alpha 版本的兼容结论。之前 `0.1.2-alpha.5` 的生命周期验证属于 `dsh-image-gen` `0.3.1`，仅作为历史保留，不能证明本版本兼容。manifest 中 rc.1 的 `compatible` 仅表示上面列出的 DSH Host、Client 与工具卡集成已经验证。新的订阅生图请求已到达服务端，但返回 HTTP 403，因此 rc.1 上的新成图成功链路仍需继续排查认证或端点问题，不包含在该兼容结论内。最近一次成功的真实 Codex 订阅生图验证于 2026-08-15 在 `0.1.0-rc.6` 完成。
 
 ## 安装
 

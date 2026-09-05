@@ -46,16 +46,17 @@ assert.deepEqual(manifest.dsh.client.inject, [
   '@deepseek-ai/dsh-client-ui-tool',
 ])
 assert.deepEqual(manifest.dsh.compatibility, {
-  dsh: '>=0.1.2-alpha.5 <0.1.3-0',
+  dsh: '>=0.1.2-rc.1 <0.1.3-0',
   dshReleases: {
     '0.1.2-alpha.3': 'unknown',
     '0.1.2-alpha.4': 'unknown',
-    '0.1.2-alpha.5': 'compatible',
-    '0.1.2-rc.1': 'unknown',
+    '0.1.2-alpha.5': 'unknown',
+    '0.1.2-rc.1': 'compatible',
   },
   profiles: ['web'],
 })
 assert.equal(semver.satisfies('0.1.2-rc.1', manifest.dsh.compatibility.dsh), true)
+assert.equal(semver.satisfies('0.1.2-alpha.5', manifest.dsh.compatibility.dsh), false)
 assert.equal('dsh-client-runtime' in manifest.peerDependencies, false)
 assert.equal(manifest.exports['./client'].default, './lib/client.js')
 

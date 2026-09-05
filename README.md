@@ -64,14 +64,13 @@ Primary references:
 
 Verified environment:
 
-- DeepSeek Harness `0.1.2-rc.1` (new Client module/renderer/tool-view APIs, Host APIs, typecheck, deterministic build, tests, and package smoke; live Profile UAT remains pending)
-- DeepSeek Harness `0.1.2-alpha.5` (disposable Web profile install, startup, HTTP readiness, and uninstall)
+- DeepSeek Harness `0.1.2-rc.1` (QA Web Profile load, plugin enablement, Host `image_gen` registration, Client tool-view load, and historical generated-card replay; plus typecheck, deterministic build, tests, and package smoke)
 - `dsh-codex-connect` `0.1.0-alpha.4.4`
 - Node.js `24.15.0` (package support: `^22.19.0` or `>=24.0.0`)
 - DSH Web profile on Windows 11
 - Real Codex subscription generation, durable replay, Blob preview, and download controls
 
-Compatibility for `0.1.2-alpha.3`, `0.1.2-alpha.4`, and the live runtime of `0.1.2-rc.1` remains `unknown`; the manifest does not infer runtime evidence from the declared range. Version `0.3.2` removes the retired `dsh-client-runtime` dependency and builds against the `0.1.2-rc.1` connection, conversation, renderer, locale, and tool-view contracts. The real Codex subscription generation check above was performed on `0.1.0-rc.6` on 2026-08-15. Disposable lifecycle verification for `0.1.2-alpha.5` was performed on 2026-09-03 without sending a provider request.
+Version `0.3.2` targets `0.1.2-rc.1` and no longer claims compatibility with the alpha builds. The earlier `0.1.2-alpha.5` lifecycle result belonged to `dsh-image-gen` `0.3.1`; it is retained as history but does not transfer to this release. The `compatible` rc.1 manifest entry records the verified DSH Host/Client/tool-view integration above. A fresh subscription generation reached the provider but returned HTTP 403, so successful new-provider output on rc.1 is still pending authentication/endpoint diagnosis and is not part of that compatibility claim. The last successful real Codex subscription generation was performed on `0.1.0-rc.6` on 2026-08-15.
 
 ## Install
 
