@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict'
 import { createRequire } from 'node:module'
 import { readFile } from 'node:fs/promises'
+import semver from 'semver'
 import vm from 'node:vm'
 
 const host = await import('../lib/index.js')
@@ -34,18 +35,28 @@ assert.equal(
 )
 
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
-assert.equal(manifest.version, '0.3.1')
+assert.equal(manifest.version, '0.3.2')
 assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
 assert.equal(manifest.dsh.client.platform, 'web')
+assert.deepEqual(manifest.dsh.client.inject, [
+  '@deepseek-ai/dsh-client-connection',
+  '@deepseek-ai/dsh-client-locale',
+  '@deepseek-ai/dsh-client-ui-chat',
+  '@deepseek-ai/dsh-client-ui-renderer',
+  '@deepseek-ai/dsh-client-ui-tool',
+])
 assert.deepEqual(manifest.dsh.compatibility, {
-  dsh: '>=0.1.0-rc.6 <0.2.0',
+  dsh: '>=0.1.2-alpha.5 <0.1.3-0',
   dshReleases: {
     '0.1.2-alpha.3': 'unknown',
     '0.1.2-alpha.4': 'unknown',
     '0.1.2-alpha.5': 'compatible',
+    '0.1.2-rc.1': 'unknown',
   },
   profiles: ['web'],
 })
+assert.equal(semver.satisfies('0.1.2-rc.1', manifest.dsh.compatibility.dsh), true)
+assert.equal('dsh-client-runtime' in manifest.peerDependencies, false)
 assert.equal(manifest.exports['./client'].default, './lib/client.js')
 
 console.log('built artifact smoke passed')

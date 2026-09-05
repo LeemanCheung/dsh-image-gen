@@ -1,9 +1,11 @@
 /** Browser plugin: animated progressive image-generation tool card. */
 
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
-import type { ClientContext, SessionId, ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
-import type { ConnectionHandle } from '@deepseek-ai/dsh-client-connection/client'
-import type { PropsRuntime } from '@deepseek-ai/dsh-client-ui-slots'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { ConnectionHandle, SessionId } from '@deepseek-ai/dsh-client-connection/client'
+import type { ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
+import type {} from '@deepseek-ai/dsh-client-ui-renderer/client'
+import type { ToolCallViewProps } from '@deepseek-ai/dsh-client-ui-tool/client'
 import type {} from '@deepseek-ai/dsh-client-locale/client'
 import type {} from '@deepseek-ai/dsh-client-ui-tool/client'
 import { IMAGE_GEN_RPC_CHANNEL, IMAGE_GEN_RPC_ENDPOINT } from '../rpc.ts'
@@ -79,12 +81,13 @@ declare module '@deepseek-ai/dsh-client-ui-slots' {
 type Translate = (key: LocaleKey) => string
 
 interface ImageGenCardInjectedProps {
+  sessionId: SessionId
   t: Translate
   requestProgress: (sessionId: SessionId, callId: string, signal: AbortSignal) => Promise<ImageProgressValue>
   requestImage: (sessionId: SessionId, callId: string, signal: AbortSignal) => Promise<{ attachment: ImageRefValue; data: string }>
 }
 
-type ImageGenCardProps = PropsRuntime<'tool.call.toolview'> & ImageGenCardInjectedProps
+type ImageGenCardProps = ToolCallViewProps & ImageGenCardInjectedProps
 
 interface ParsedArgs {
   prompt: string
@@ -410,7 +413,8 @@ export function apply(ctx: ClientContext): void {
     name: 'tool.call.toolview',
     key: 'image_gen',
     locale: NS,
-    inject: () => ({
+    inject: (sessionId) => ({
+      sessionId,
       t,
       requestProgress: async (sessionId: SessionId, callId: string, signal: AbortSignal) => decodeProgress(
         await call(IMAGE_GEN_RPC_ENDPOINT.progress, { sessionId: String(sessionId), callId }, signal),

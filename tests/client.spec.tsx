@@ -3,7 +3,8 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentType } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { ClientContext, ToolCallBlock } from '@deepseek-ai/dsh-client-runtime/client'
+import type { Context as ClientContext } from '@deepseek-ai/cordis'
+import type { ToolCallBlock } from '@deepseek-ai/dsh-client-ui-chat/client'
 import { apply } from '../src/client/index.tsx'
 import { IMAGE_GEN_RPC_ENDPOINT } from '../src/rpc.ts'
 import { IMAGE_GEN_STYLES } from '../src/client/styles.ts'
@@ -89,9 +90,9 @@ function card(rpc: (endpoint: string) => Promise<unknown>) {
   }
   const slots = {
     inject: vi.fn((_name: string, install: () => unknown) => install()),
-    register: vi.fn((registration: { inject?: () => Record<string, unknown> }, next: ComponentType<Record<string, unknown>>) => {
+    register: vi.fn((registration: { inject?: (sessionId: string) => Record<string, unknown> }, next: ComponentType<Record<string, unknown>>) => {
       Component = next
-      injected = registration.inject?.() ?? {}
+      injected = registration.inject?.('session-1') ?? {}
       return () => {}
     }),
   }

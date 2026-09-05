@@ -7,7 +7,6 @@ const external = [
   'react-dom',
   'react-dom/client',
   '@deepseek-ai/cordis',
-  '@deepseek-ai/dsh-client-ui-slots',
 ]
 
 export default defineConfig([
@@ -32,8 +31,10 @@ export default defineConfig([
     dts: false,
     sourcemap: true,
     clean: false,
-    external,
-    noExternal: (source: string) => external.includes(source) ? undefined : true,
+    deps: {
+      neverBundle: external,
+      onlyBundle: false,
+    },
     define: {
       'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
       'import.meta.env.MODE': JSON.stringify(process.env.NODE_ENV ?? 'production'),

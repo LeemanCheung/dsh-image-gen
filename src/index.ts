@@ -388,7 +388,6 @@ export function apply(ctx: Context, config: Config): void {
         return rpcError('image-unavailable', 'The generated image could not be read.')
       }
     },
-    { authority: 'loopback' },
   ), 'image-gen: loopback progress and image RPC')
 
   ctx.tools.register(defineTool({
