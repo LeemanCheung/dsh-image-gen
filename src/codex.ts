@@ -2,7 +2,9 @@
 
 import { lstat, readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
+import { createRequire } from 'node:module'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const CONNECTOR_PACKAGE = 'dsh-codex-connect'
 const CODEX_PROVIDER_ID = 'openai-codex'
@@ -46,8 +48,29 @@ function dshHome(): string {
   return configured === undefined || configured.length === 0 ? join(homedir(), '.dsh') : configured
 }
 
-async function defaultLoadConnector(): Promise<unknown> {
-  return import(CONNECTOR_PACKAGE)
+export function activeProfileName(args = process.argv.slice(2)): string {
+  if (args[0] === 'web') return 'web'
+  const index = args.indexOf('--profile')
+  const name = index >= 0 ? args[index + 1] : undefined
+  return name !== undefined && /^[a-zA-Z0-9_-]+$/.test(name) ? name : 'web'
+}
+
+/** A linked plugin must resolve optional integrations from the active Profile too. */
+export async function loadInstalledCodexConnector(
+  direct: LoadCodexConnector = () => import(CONNECTOR_PACKAGE),
+  resolveInProfile: () => string = () => createRequire(join(dshHome(), 'profiles', activeProfileName(), 'package.json')).resolve(CONNECTOR_PACKAGE),
+  loadResolved: (url: string) => Promise<unknown> = url => import(url),
+): Promise<unknown> {
+  try { return await direct() } catch (error) {
+    if (!connectorUnavailable(error)) throw error
+    let filename: string
+    try { filename = resolveInProfile() } catch (resolutionError) {
+      const missing = resolutionError as { code?: string; message?: string }
+      if (missing.code === 'MODULE_NOT_FOUND' && missing.message?.includes(`'${CONNECTOR_PACKAGE}'`)) throw error
+      throw resolutionError
+    }
+    return loadResolved(pathToFileURL(filename).href)
+  }
 }
 
 async function defaultReadCodexAuthDocument(signal: AbortSignal): Promise<unknown> {
@@ -139,7 +162,7 @@ function project(credential: OAuthCredential, now: number): CodexSubscriptionAut
 /** Resolve the current DSH-owned Codex subscription credential without retaining it. */
 export async function resolveCodexSubscriptionAuth(
   signal: AbortSignal,
-  loadConnector: LoadCodexConnector = defaultLoadConnector,
+  loadConnector: LoadCodexConnector = loadInstalledCodexConnector,
   readDocument: ReadCodexAuthDocument = defaultReadCodexAuthDocument,
   now: () => number = Date.now,
   trackWork?: TrackCodexAuthWork,

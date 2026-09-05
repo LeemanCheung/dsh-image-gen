@@ -7,6 +7,8 @@
 
 在 DeepSeek Harness 会话中使用 OpenAI `gpt-image-2` 生成图片；默认复用已登录的 Codex 订阅，也可显式切换为 API Key。
 
+使用本地 `link:` 开发目录时，也会从当前 DSH Profile 解析 Codex Connect，并通过连接器的公开存储接口使用当前选中账号，兼容新版多账号格式。这样不会再把可选依赖的路径解析失败误报成“未登录”。该通路已在实际安装的 Profile 上验证，检查中不显示凭据值。
+
 [English](./README.md)
 
 <p align="center"><img src="./assets/demo.svg" width="760" alt="dsh-image-gen 渐进预览动画" /></p>

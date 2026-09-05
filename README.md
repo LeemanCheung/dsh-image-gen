@@ -7,6 +7,8 @@
 
 Generate images in DeepSeek Harness with OpenAI `gpt-image-2`, using a signed-in Codex subscription by default or an API key when explicitly configured.
 
+Linked development installs also resolve Codex Connect from the active DSH Profile. This uses the connector's public store, including its selected account in the current multi-account format, instead of mistaking an inaccessible optional dependency for a signed-out account. The same path has been verified against the installed Profile without displaying credential values.
+
 [中文说明](./README.zh.md)
 
 <p align="center"><img src="./assets/demo.svg" width="760" alt="Animated dsh-image-gen progressive preview" /></p>

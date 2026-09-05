@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { resolveCodexSubscriptionAuth } from '../src/codex.ts'
+import { activeProfileName, loadInstalledCodexConnector, resolveCodexSubscriptionAuth } from '../src/codex.ts'
 
 const now = 1_800_000_000_000
 
@@ -23,6 +23,28 @@ function unavailableConnector(): Promise<unknown> {
 }
 
 describe('Codex subscription authentication', () => {
+  it('resolves a linked plugin integration from its active Profile before reading legacy JSON', async () => {
+    const module = { OpenAICodexCredentialStore: class {}, readOpenAICodexRateLimits: vi.fn() }
+    const fromProfile = vi.fn(() => '/isolated/profile/node_modules/dsh-codex-connect/lib/index.js')
+    const load = vi.fn(async (_url: string) => module)
+    await expect(loadInstalledCodexConnector(unavailableConnector, fromProfile, load)).resolves.toBe(module)
+    expect(fromProfile).toHaveBeenCalledOnce()
+    expect(load.mock.calls[0]?.[0]).toMatch(/^file:\/\//)
+  })
+
+  it('does not disguise a broken direct connector by loading another copy', async () => {
+    const failure = Object.assign(new Error("Cannot find package 'undici'"), { code: 'ERR_MODULE_NOT_FOUND' })
+    const fromProfile = vi.fn()
+    await expect(loadInstalledCodexConnector(async () => { throw failure }, fromProfile)).rejects.toBe(failure)
+    expect(fromProfile).not.toHaveBeenCalled()
+  })
+
+  it('uses the actual profile and rejects profile path traversal', () => {
+    expect(activeProfileName(['web'])).toBe('web')
+    expect(activeProfileName(['--profile', 'image-gen-smoke'])).toBe('image-gen-smoke')
+    expect(activeProfileName(['--profile', '../../another-home'])).toBe('web')
+  })
+
   it('uses the public Codex Connect store and returns only the transport projection', async () => {
     class Store {
       async read(providerId: string) {
