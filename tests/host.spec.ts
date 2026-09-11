@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreToolDecision, ToolDefinition, ToolExecution, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { apply, inject, type Config } from '../src/index.ts'
@@ -32,6 +32,7 @@ const config: Config = {
   maxRetries: 0,
   retryBaseMs: 1,
   maxConcurrent: 2,
+  servedResultTtlMs: 300_000,
 }
 
 function sseFinal(data = 'png-data'): Response {
@@ -364,9 +365,49 @@ describe('Host image generation plugin', () => {
     expect(fallback).toMatchObject({ model: CODEX_SUBSCRIPTION_MODEL })
   })
 
+  it('serves a just-generated image while its session result is not durable yet', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseFinal()))
+    const { definition, rpcHandler, setEvents, readImage } = harness()
+    if (definition.execute === undefined) throw new Error('missing tool body')
+
+    const value = await definition.execute({ prompt: 'A blue glass whale' }, execution())
+    // The session store has not committed the completed result yet.
+    setEvents([])
+    const pending = await rpcHandler(IMAGE_GEN_RPC_ENDPOINT.image, { sessionId: 'session-1', callId: 'call-1' }, new AbortController().signal)
+    expect(pending).toMatchObject({ ok: true, value: { attachment: { attachmentId: value.image.attachmentId } } })
+    expect(readImage).toHaveBeenCalledOnce()
+
+    // Another session can never reach it, even while it is still fresh.
+    const other = await rpcHandler(IMAGE_GEN_RPC_ENDPOINT.image, { sessionId: 'session-2', callId: 'call-1' }, new AbortController().signal)
+    expect(other).toMatchObject({ ok: false, error: { details: { reason: 'pending' } } })
+  })
+
+  it('stops serving a fresh result once its window elapses and the session lacks it', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('fetch', vi.fn(async () => sseFinal()))
+      const { definition, rpcHandler, setEvents } = harness({ config: { servedResultTtlMs: 1_000 } })
+      if (definition.execute === undefined) throw new Error('missing tool body')
+
+      await definition.execute({ prompt: 'A blue glass whale' }, execution())
+      setEvents([])
+      const fresh = await rpcHandler(IMAGE_GEN_RPC_ENDPOINT.image, { sessionId: 'session-1', callId: 'call-1' }, new AbortController().signal)
+      expect(fresh).toMatchObject({ ok: true })
+
+      vi.advanceTimersByTime(1_500)
+      const expired = await rpcHandler(IMAGE_GEN_RPC_ENDPOINT.image, { sessionId: 'session-1', callId: 'call-1' }, new AbortController().signal)
+      expect(expired).toMatchObject({ ok: false, error: { details: { reason: 'pending' } } })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('authorizes durable bytes from native metadata and Code Mode markers', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => sseFinal()))
-    const { definition, rpcHandler, readImage, setEvents } = harness()
+    // A zero freshness window keeps the session store the only authority, so the
+    // denied cases below assert the authorization boundary rather than the
+    // just-generated fallback.
+    const { definition, rpcHandler, readImage, setEvents } = harness({ config: { servedResultTtlMs: 0 } })
     if (definition.execute === undefined || definition.output === undefined) throw new Error('missing tool body')
     const value = await definition.execute({ prompt: 'A blue glass whale' }, execution())
     const meta = definition.output.presentationMeta?.({}, value)

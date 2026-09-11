@@ -38,6 +38,7 @@ import {
   type ImageReferenceValue,
   type ImageQuality,
   type ImageRefValue,
+  type ImageUnavailableReason,
 } from './types.ts'
 
 /** Cordis plugin name. */
@@ -84,6 +85,7 @@ export interface Config {
   maxRetries: number
   retryBaseMs: number
   maxConcurrent: number
+  servedResultTtlMs: number
 }
 
 /** Cordis configuration schema. */
@@ -103,6 +105,7 @@ export const Config: Schema<Config> = Schema.object({
   maxRetries: Schema.number().min(0).max(5).step(1).default(2),
   retryBaseMs: Schema.number().min(100).max(30_000).step(1).default(1_000),
   maxConcurrent: Schema.number().min(1).max(8).step(1).default(2),
+  servedResultTtlMs: Schema.number().min(0).max(600_000).step(1_000).default(300_000),
 })
 
 interface ActiveGeneration {
@@ -294,10 +297,9 @@ function authorizedImage(events: readonly unknown[], callId: string): ImageRefVa
   return undefined
 }
 
-function rpcError(reason: string, message: string) {
+function rpcError(reason: ImageUnavailableReason | string, message: string) {
   return { ok: false as const, error: { code: 'attachment-error' as const, message, details: { reason } } }
 }
-
 function progressOf(entry: ActiveGeneration | undefined): ImageProgressValue {
   if (entry === undefined) return { state: 'missing', revision: 0, attempt: 0, startedAt: 0 }
   return {
@@ -320,10 +322,43 @@ function validateConfig(config: Config): void {
 export function apply(ctx: Context, config: Config): void {
   validateConfig(config)
   const active = new Map<string, ActiveGeneration>()
+  const keyOf = (sessionId: string, callId: string): string => `${sessionId}\u0000${callId}`
+  /**
+   * Recently completed results, keyed by session and call.
+   *
+   * The loopback read authorizes an image by finding the completed tool result
+   * in the session store. That store is written asynchronously, so a card that
+   * settles immediately can ask for its bytes before the result is durable and
+   * would otherwise be refused. This bounded, short-lived cache closes exactly
+   * that gap. It is deliberately not a long-term authorization path: after the
+   * freshness window the session store is the only authority, so a session that
+   * does not contain the result cannot read the image.
+   */
+  const served = new Map<string, { value: ImageGenerationValue; at: number }>()
+  const servedLimit = 32
+  const rememberServed = (sessionId: string, callId: string, value: ImageGenerationValue): void => {
+    const key = keyOf(sessionId, callId)
+    served.delete(key)
+    served.set(key, { value, at: Date.now() })
+    while (served.size > servedLimit) {
+      const oldest = served.keys().next()
+      if (oldest.done === true) break
+      served.delete(oldest.value)
+    }
+  }
+  const recentlyServed = (sessionId: string, callId: string): ImageRefValue | undefined => {
+    const key = keyOf(sessionId, callId)
+    const entry = served.get(key)
+    if (entry === undefined) return undefined
+    if (Date.now() - entry.at > config.servedResultTtlMs) {
+      served.delete(key)
+      return undefined
+    }
+    return entry.value.image
+  }
   const inFlight = new Set<Promise<void>>()
   const lifetime = new AbortController()
   let stopping = false
-  const keyOf = (sessionId: string, callId: string): string => `${sessionId}\u0000${callId}`
   const trackBackgroundWork = (work: Promise<unknown>): void => {
     const settled = work.then(() => {}, () => {})
     inFlight.add(settled)
@@ -395,10 +430,16 @@ export function apply(ctx: Context, config: Config): void {
       try {
         inspection = await ctx.sessionPersistence.inspect(SessionId(sessionId), signal)
       } catch {
-        return rpcError('image-unavailable', 'The image session could not be inspected.')
+        return rpcError('inspection-failed', 'The image session could not be inspected.')
       }
-      const ref = authorizedImage(inspection.events, callId)
-      if (ref === undefined) return rpcError('image-unavailable', 'The image is not authorized by this session.')
+      const authorized = authorizedImage(inspection.events, callId)
+      const ref = authorized ?? recentlyServed(sessionId, callId)
+      if (ref === undefined) {
+        return rpcError(
+          'pending',
+          'The session store has not committed this image call yet. It becomes readable as soon as the completed result is durable.',
+        )
+      }
       try {
         const stored = await ctx.attachments.readImage(attachmentRef(ref), signal)
         return {
@@ -409,7 +450,8 @@ export function apply(ctx: Context, config: Config): void {
           },
         }
       } catch {
-        return rpcError('image-unavailable', 'The generated image could not be read.')
+        ctx.logger.warn(`image_gen could not read its own attachment for call ${callId}`)
+        return rpcError('attachment-failed', 'The generated image could not be read.')
       }
     },
   ), 'image-gen: loopback progress and image RPC')
@@ -644,7 +686,7 @@ export function apply(ctx: Context, config: Config): void {
           throw new Error('The attachment service did not return every saved image reference.')
         }
         requestSignal.throwIfAborted()
-        return {
+        const value: ImageGenerationValue = {
           schema: RESULT_SCHEMA,
           callId,
           model: requestModel,
@@ -662,6 +704,8 @@ export function apply(ctx: Context, config: Config): void {
           elapsedMs: Math.max(0, Date.now() - entry.startedAt),
           ...(generated.usage === undefined ? {} : { usage: generated.usage }),
         }
+        rememberServed(String(sessionId), callId, value)
+        return value
       } catch (error) {
         if (error instanceof ImageApiError) {
           ctx.logger.warn(`image_gen provider failure${error.code === undefined ? '' : ` (${error.code})`}: ${error.message}`)

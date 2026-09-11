@@ -4,6 +4,30 @@ export const RESULT_SCHEMA = 'dsh-image-gen/result-v1' as const
 export const PRESENTATION_SCHEMA = 'dsh-image-gen/presentation-v1' as const
 export const REFERENCE_SCHEMA = 'dsh-image-gen/ref-v1' as const
 export const REFERENCE_MARKER = 'DSH_IMAGE_REF_V1 ' as const
+export const ERROR_SCHEMA = 'dsh-image-gen/error-v1' as const
+
+/**
+ * Reason one image read was refused.
+ *
+ * `pending` means the session store has not committed the completed tool result
+ * yet, which is transient; the others are terminal for that call.
+ */
+export type ImageUnavailableReason = 'pending' | 'inspection-failed' | 'attachment-failed'
+
+/** Safe Host diagnostics attached to a failed image read. */
+export interface ImageErrorDetails {
+  reason: ImageUnavailableReason
+}
+
+/** Narrows an untrusted RPC error payload to the plugin's own failure shape. */
+export function imageErrorDetails(value: unknown): ImageErrorDetails | undefined {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return undefined
+  const details = value as Record<string, unknown>
+  if (details.reason !== 'pending'
+    && details.reason !== 'inspection-failed'
+    && details.reason !== 'attachment-failed') return undefined
+  return { reason: details.reason }
+}
 
 export type ImageQuality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 

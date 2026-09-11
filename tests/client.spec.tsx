@@ -52,8 +52,15 @@ const finalResult = {
   elapsedMs: 4_200,
 }
 
-function settled(options: { error?: boolean } = {}): ToolCallBlock {
-  return {
+/** Signals one host-side image read refusal through the card's RPC fixture. */
+class RpcFailure extends Error {
+  constructor(readonly reason: string, message: string) {
+    super(message)
+    this.name = 'RpcFailure'
+  }
+}
+
+function settled(options: { error?: boolean } = {}): ToolCallBlock {  return {
     kind: 'tool-result',
     seq: 2,
     time: Date.now(),
@@ -76,7 +83,16 @@ function card(rpc: (endpoint: string) => Promise<unknown>) {
   const connection = {
     isLoopback: true,
     rpc: {
-      call: vi.fn(async (_channel: string, endpoint: string) => ({ ok: true, value: await rpc(endpoint) })),
+      call: vi.fn(async (_channel: string, endpoint: string) => {
+        try {
+          return { ok: true, value: await rpc(endpoint) }
+        } catch (error) {
+          if (error instanceof RpcFailure) {
+            return { ok: false, error: { code: 'attachment-error', message: error.message, details: { reason: error.reason } } }
+          }
+          throw error
+        }
+      }),
     },
   }
   const locale = {
@@ -152,6 +168,52 @@ describe('animated image card', () => {
     await waitFor(() => { expect(screen.queryByRole('dialog')).toBeNull() })
     unmount()
     expect(revokeObjectURL).toHaveBeenCalledWith('blob:final-image')
+    await registered.dispose()
+  })
+
+  it('retries a pending image read and still renders the final image', async () => {
+    vi.useFakeTimers()
+    try {
+      vi.stubGlobal('URL', Object.assign(URL, { createObjectURL: vi.fn(() => 'blob:final-image'), revokeObjectURL: vi.fn() }))
+      let attempts = 0
+      const registered = card(async endpoint => {
+        expect(endpoint).toBe(IMAGE_GEN_RPC_ENDPOINT.image)
+        attempts += 1
+        if (attempts <= 2) throw new RpcFailure('pending', 'The session store has not committed this image call yet.')
+        return { attachment: finalResult.image, data: Buffer.from('png-data').toString('base64') }
+      })
+      render(<registered.Component {...registered.injected} sessionId={'session-1'} callId="call-1" toolName="image_gen" block={settled()} openFile={() => {}} />)
+
+      const flush = async (): Promise<void> => { await act(async () => { await Promise.resolve() }) }
+      await flush()
+      expect(attempts).toBe(1)
+
+      // Each bounded backoff attempt retries a transient refusal instead of
+      // leaving the card in a terminal error state.
+      for (const delay of [400, 1_200]) {
+        await act(async () => { await vi.advanceTimersByTimeAsync(delay) })
+        await flush()
+      }
+
+      expect(attempts).toBe(3)
+      expect(screen.getByRole('img').getAttribute('src')).toBe('blob:final-image')
+      expect(screen.queryByRole('alert')).toBeNull()
+      await registered.dispose()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('stops retrying and explains a terminal attachment failure', async () => {
+    let attempts = 0
+    const registered = card(async () => {
+      attempts += 1
+      throw new RpcFailure('attachment-failed', 'The generated image could not be read.')
+    })
+    render(<registered.Component {...registered.injected} sessionId={'session-1'} callId="call-1" toolName="image_gen" block={settled()} openFile={() => {}} />)
+
+    await waitFor(() => { expect(screen.getByRole('alert').textContent).toContain('附件读取失败：The generated image could not be read.') })
+    expect(attempts).toBe(1)
     await registered.dispose()
   })
 

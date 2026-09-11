@@ -14,16 +14,35 @@ import {
   REFERENCE_MARKER,
   REFERENCE_SCHEMA,
   RESULT_SCHEMA,
+  imageErrorDetails,
   type ImageGenerationValue,
   type ImagePresentationValue,
   type ImageProgressValue,
   type ImageReferenceValue,
   type ImageRefValue,
+  type ImageUnavailableReason,
 } from '../types.ts'
 import { IMAGE_GEN_STYLES } from './styles.ts'
 
 const NS = 'dsh.imageGen' as const
 const POLL_MS = 650
+/** Bounded retry for an image read that the session store had not committed yet. */
+const IMAGE_RETRY_MS = [400, 1_200, 3_000] as const
+
+/**
+ * Localized, actionable copy for one refused image read.
+ *
+ * `pending` is transient by construction, so its copy tells the reader that it
+ * resolves on its own rather than implying the image is gone.
+ */
+function imageErrorCopy(reason: ImageUnavailableReason | undefined, message: string): string {
+  switch (reason) {
+    case 'pending': return '图片正在写入会话存储，稍候会自动重试。'
+    case 'inspection-failed': return `会话存储读取失败：${message}`
+    case 'attachment-failed': return `附件读取失败：${message}`
+    default: return message
+  }
+}
 
 const en = {
   generating: 'Generating image',
@@ -225,7 +244,7 @@ function ImageGenCard({ sessionId, callId, block, t, requestProgress, requestIma
   const failed = settled && (block.isError || presentation === undefined)
   const [progress, setProgress] = useState<ImageProgressValue | undefined>()
   const [finalImage, setFinalImage] = useState<string | undefined>()
-  const [loadError, setLoadError] = useState(false)
+  const [loadError, setLoadError] = useState<string | undefined>()
   const [lightbox, setLightbox] = useState(false)
 
   useEffect(() => {
@@ -256,16 +275,35 @@ function ImageGenCard({ sessionId, callId, block, t, requestProgress, requestIma
     const controller = new AbortController()
     let live = true
     let objectUrl: string | undefined
-    setLoadError(false)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    setLoadError(undefined)
     setFinalImage(undefined)
-    void requestImage(sessionId, callId, controller.signal).then(({ attachment, data }) => {
-      if (!live) return
-      objectUrl = finalImageUrl(attachment.mediaType, data)
-      setFinalImage(objectUrl)
-    }).catch(() => { if (live) setLoadError(true) })
+    void (async () => {
+      for (let attempt = 0; ; attempt += 1) {
+        try {
+          const { attachment, data } = await requestImage(sessionId, callId, controller.signal)
+          if (!live) return
+          objectUrl = finalImageUrl(attachment.mediaType, data)
+          setFinalImage(objectUrl)
+          setLoadError(undefined)
+          return
+        } catch (error) {
+          if (!live || controller.signal.aborted) return
+          const reason = (error as { reason?: ImageUnavailableReason }).reason
+          const retryIn = reason === 'pending' ? IMAGE_RETRY_MS[attempt] : undefined
+          if (retryIn === undefined) {
+            setLoadError(error instanceof Error ? error.message : String(error))
+            return
+          }
+          await new Promise<void>(resolve => { timer = setTimeout(resolve, retryIn) })
+          if (!live) return
+        }
+      }
+    })()
     return () => {
       live = false
       controller.abort()
+      if (timer !== undefined) clearTimeout(timer)
       if (objectUrl?.startsWith('blob:') === true) URL.revokeObjectURL(objectUrl)
     }
   }, [callId, presentation, requestImage, sessionId])
@@ -293,7 +331,7 @@ function ImageGenCard({ sessionId, callId, block, t, requestProgress, requestIma
         ? t('saving')
         : settled && finalImage !== undefined
           ? t('ready')
-          : settled && presentation !== undefined && !loadError
+          : settled && presentation !== undefined && loadError === undefined
             ? t('loading')
             : t('waiting')
   const title = failed
@@ -305,7 +343,7 @@ function ImageGenCard({ sessionId, callId, block, t, requestProgress, requestIma
   const elapsed = result?.elapsedMs ?? Math.max(0, Date.now() - startedAt)
   const error = failed
     ? settled && block.isError ? resultError(block, t('noOutput')) : t('noOutput')
-    : loadError ? t('unavailable') : ''
+    : loadError ?? ''
   const filename = result?.image.name ?? `${result?.model ?? args.model ?? 'image-gen'}.${result?.outputFormat === 'jpeg' ? 'jpg' : result?.outputFormat ?? args.outputFormat}`
   const sizeLabel = result === undefined ? args.size : `${result.image.width}x${result.image.height}`
   const qualityLabel = result === undefined
@@ -409,7 +447,12 @@ export function apply(ctx: ClientContext): void {
   const call = async (endpoint: string, payload: unknown, signal: AbortSignal): Promise<unknown> => {
     if (!connection.isLoopback) throw new Error('Image previews are available only from the local DSH page')
     const result = await connection.rpc.call(IMAGE_GEN_RPC_CHANNEL, endpoint, payload, signal)
-    if (!result.ok) throw new Error(`${result.error.code}: ${result.error.message}`)
+    if (!result.ok) {
+      const reason = imageErrorDetails(result.error.details)?.reason
+      const error = new Error(imageErrorCopy(reason, result.error.message)) as Error & { reason?: string }
+      if (reason !== undefined) error.reason = reason
+      throw error
+    }
     return result.value
   }
   ctx.slots.inject('tool.call.toolview', () => ctx.slots.register({
