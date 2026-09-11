@@ -5,6 +5,7 @@ import {
   ImageApiError,
   OpenAIImageClient,
   imageApiBaseUrl,
+  imageModel,
   imageSize,
   type GenerateImageProgress,
 } from '../src/openai.ts'
@@ -61,6 +62,72 @@ describe('OpenAI image transport', () => {
     expect(() => imageSize('1000x1000')).toThrow('divisible by 16')
     expect(() => imageSize('4096x1024')).toThrow('3840')
     expect(() => imageSize('512x512')).toThrow('pixels')
+  })
+
+  it('validates provider image model identifiers', () => {
+    expect(imageModel('  gpt-image-2.5-flare  ')).toBe('gpt-image-2.5-flare')
+    expect(imageModel('gpt-image-2.5-sunburst-2026-09-08')).toBe('gpt-image-2.5-sunburst-2026-09-08')
+    expect(imageModel('vendor:image-model_v2')).toBe('vendor:image-model_v2')
+    expect(() => imageModel('   ')).toThrow('1–128 characters')
+    expect(() => imageModel('x'.repeat(129))).toThrow('1–128 characters')
+    expect(() => imageModel('gpt image 2.5')).toThrow('only letters, digits')
+    expect(() => imageModel('gpt-image-2.5/../etc')).toThrow('only letters, digits')
+  })
+
+  it('sends GPT Image 2.5 models and its extended quality tiers through the public Image API', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      const body = JSON.parse(String(init?.body)) as Record<string, unknown>
+      expect(body).toMatchObject({
+        model: 'gpt-image-2.5-sunburst',
+        quality: 'max',
+        size: '1536x1024',
+      })
+      return new Response(JSON.stringify({
+        data: [{ b64_json: Buffer.from('sunburst-image').toString('base64') }],
+        output_format: 'png',
+        size: '1536x1024',
+        quality: 'max',
+      }), { headers: { 'content-type': 'application/json' } })
+    })
+
+    const generated = await client(fetchImpl).generate({
+      ...request,
+      model: 'gpt-image-2.5-sunburst',
+      size: '1536x1024',
+      quality: 'max',
+    }, new AbortController().signal, () => {})
+
+    expect(Buffer.from(generated.data).toString()).toBe('sunburst-image')
+    expect(generated).toMatchObject({ quality: 'max', qualitySource: 'provider' })
+  })
+
+  it('routes an overridden model through the API-key edit endpoint', async () => {
+    const fetchImpl = vi.fn<typeof fetch>(async (_input, init) => {
+      const body = init?.body as FormData
+      expect(body.get('model')).toBe('gpt-image-2.5-flare')
+      expect(body.get('quality')).toBe('xhigh')
+      return new Response(JSON.stringify({
+        data: [{ b64_json: Buffer.from('edited-image').toString('base64') }],
+        output_format: 'png',
+        quality: 'xhigh',
+      }), { headers: { 'content-type': 'application/json' } })
+    })
+
+    await client(fetchImpl).generate({
+      ...request,
+      model: 'gpt-image-2.5-flare',
+      quality: 'xhigh',
+      referenceImage: { data: new Uint8Array(Buffer.from('reference-png')), mediaType: 'image/png', name: 'minke.png' },
+    }, new AbortController().signal, () => {})
+  })
+
+  it('falls back to the requested quality when the provider reports an unknown tier', async () => {
+    const final = Buffer.from('final-image').toString('base64')
+    const generated = await client(async () => sseResponse([
+      `data: {"type":"image_generation.completed","output_format":"png","size":"1024x1024","quality":"ultra","b64_json":"${final}"}\n\n`,
+    ])).generate({ ...request, quality: 'max' }, new AbortController().signal, () => {})
+
+    expect(generated).toMatchObject({ quality: 'max', qualitySource: 'request' })
   })
 
   it('parses split CRLF streams and replaces partial progress before completion', async () => {

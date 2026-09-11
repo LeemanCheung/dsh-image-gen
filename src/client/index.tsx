@@ -91,6 +91,7 @@ type ImageGenCardProps = ToolCallViewProps & ImageGenCardInjectedProps
 
 interface ParsedArgs {
   prompt: string
+  model?: string
   size: string
   quality: string
   outputFormat: string
@@ -102,18 +103,20 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function argsOf(block: ToolCallBlock): ParsedArgs {
   const raw = 'kind' in block ? block.call?.argsRaw : block.argsRaw
-  if (raw === null || raw === undefined) return { prompt: '', size: 'auto', quality: 'auto', outputFormat: 'png' }
+  const empty: ParsedArgs = { prompt: '', size: 'auto', quality: 'auto', outputFormat: 'png' }
+  if (raw === null || raw === undefined) return empty
   try {
     const value = JSON.parse(raw) as unknown
     if (!isRecord(value)) throw new Error('not an object')
     return {
       prompt: typeof value.prompt === 'string' ? value.prompt : '',
+      ...(typeof value.model === 'string' && value.model !== '' ? { model: value.model } : {}),
       size: typeof value.size === 'string' ? value.size : 'auto',
       quality: typeof value.quality === 'string' ? value.quality : 'auto',
       outputFormat: typeof value.output_format === 'string' ? value.output_format : 'png',
     }
   } catch {
-    return { prompt: '', size: 'auto', quality: 'auto', outputFormat: 'png' }
+    return empty
   }
 }
 
@@ -303,7 +306,7 @@ function ImageGenCard({ sessionId, callId, block, t, requestProgress, requestIma
   const error = failed
     ? settled && block.isError ? resultError(block, t('noOutput')) : t('noOutput')
     : loadError ? t('unavailable') : ''
-  const filename = result?.image.name ?? `gpt-image-2.${result?.outputFormat === 'jpeg' ? 'jpg' : result?.outputFormat ?? args.outputFormat}`
+  const filename = result?.image.name ?? `${result?.model ?? args.model ?? 'image-gen'}.${result?.outputFormat === 'jpeg' ? 'jpg' : result?.outputFormat ?? args.outputFormat}`
   const sizeLabel = result === undefined ? args.size : `${result.image.width}x${result.image.height}`
   const qualityLabel = result === undefined
     ? args.quality
@@ -325,7 +328,7 @@ function ImageGenCard({ sessionId, callId, block, t, requestProgress, requestIma
         <ImageMark />
         <div className="dshImageGen__heading">
           <div className="dshImageGen__title">{title}</div>
-          <div className="dshImageGen__subtitle">{failed ? 'GPT Image 2' : phase}</div>
+          <div className="dshImageGen__subtitle">{failed ? result?.model ?? args.model ?? 'GPT Image' : phase}</div>
         </div>
         <span className="dshImageGen__state"><span className="dshImageGen__dot" />{elapsedLabel(elapsed)}</span>
       </header>

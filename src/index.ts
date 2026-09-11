@@ -1,4 +1,4 @@
-/** Host plugin: GPT Image 2 tool, progressive state, and durable image reads. */
+/** Host plugin: GPT Image tool, progressive state, and durable image reads. */
 
 import { basename, extname } from 'node:path'
 import type { Context } from '@deepseek-ai/cordis'
@@ -18,10 +18,12 @@ import {
   type ImageGenerationInput,
   OpenAIImageClient,
   imageApiBaseUrl,
+  imageModel,
   imageSize,
 } from './openai.ts'
 import { IMAGE_GEN_RPC_CHANNEL, IMAGE_GEN_RPC_ENDPOINT } from './rpc.ts'
 import {
+  IMAGE_QUALITIES,
   PRESENTATION_SCHEMA,
   REFERENCE_MARKER,
   REFERENCE_SCHEMA,
@@ -40,6 +42,19 @@ import {
 
 /** Cordis plugin name. */
 export const name = 'image-gen'
+
+/**
+ * Image model whose request shape has been verified on the private Codex
+ * subscription endpoint.
+ *
+ * The subscription backend is a private compatibility surface: it has not been
+ * verified to accept the GPT Image 2.5 aliases, so subscription mode keeps this
+ * fixed model and API-key mode owns provider/model selection.
+ */
+export const CODEX_SUBSCRIPTION_MODEL = 'gpt-image-2'
+
+/** Default provider image model for API-key mode. */
+export const DEFAULT_IMAGE_MODEL = 'gpt-image-2.5-flare'
 
 /** Required Host services. */
 export const inject = ['tools', 'attachments', 'credentials', 'connection', 'sessionPersistence']
@@ -68,9 +83,9 @@ export const Config: Schema<Config> = Schema.object({
   authMode: Schema.union(['auto', 'codex-subscription', 'api-key']).default('auto'),
   apiKeyEnv: Schema.string().default('OPENAI_API_KEY'),
   baseUrl: Schema.string().default('https://api.openai.com/v1'),
-  model: Schema.string().default('gpt-image-2'),
+  model: Schema.string().default(DEFAULT_IMAGE_MODEL),
   defaultSize: Schema.string().default('auto'),
-  defaultQuality: Schema.union(['auto', 'low', 'medium', 'high']).default('auto'),
+  defaultQuality: Schema.union([...IMAGE_QUALITIES]).default('auto'),
   defaultOutputFormat: Schema.union(['png', 'jpeg', 'webp']).default('png'),
   defaultOutputCompression: Schema.number().min(0).max(100).step(1).default(90),
   defaultBackground: Schema.union(['auto', 'opaque', 'transparent']).default('auto'),
@@ -94,6 +109,7 @@ interface ActiveGeneration {
 
 interface ImageArguments {
   prompt: string
+  model?: string
   size?: string
   quality?: ImageQuality
   output_format?: ImageOutputFormat
@@ -289,7 +305,7 @@ function validateConfig(config: Config): void {
   imageApiBaseUrl(config.baseUrl)
   imageSize(config.defaultSize)
   credentialRef(config.apiKeyEnv)
-  if (config.model.trim() === '') throw new TypeError('model must not be blank')
+  imageModel(config.model)
 }
 
 /** Register the image tool and its loopback progress/image channel. */
@@ -392,12 +408,16 @@ export function apply(ctx: Context, config: Config): void {
 
   ctx.tools.register(defineTool({
     name: 'image_gen',
-    description: 'Generate one new image with OpenAI GPT Image 2 using the signed-in Codex subscription by default, with API-key fallback when configured. Set reference_image_path to make an API-key image edit from a PNG, JPEG, or WebP reference; every reference upload requires one-time user approval. Use this when the user asks to create, draw, render, illustrate, or design an image. The result appears in an animated DSH image card with preview and download.',
+    description: 'Generate one new image with OpenAI GPT Image 2 or GPT Image 2.5 using the signed-in Codex subscription by default, with API-key fallback when configured. Set reference_image_path to make an API-key image edit from a PNG, JPEG, or WebP reference; every reference upload requires one-time user approval. Use this when the user asks to create, draw, render, illustrate, or design an image. The result appears in an animated DSH image card with preview and download.',
     parameters: {
       prompt: {
         type: 'string',
         required: true,
         description: 'Detailed image prompt. Preserve user constraints and describe subject, composition, style, lighting, palette, text, and exclusions as relevant.',
+      },
+      model: {
+        type: 'string',
+        description: 'API-key mode only: provider image model for this call, such as gpt-image-2.5-flare or gpt-image-2.5-sunburst. Omit for the deployment default. The Codex subscription endpoint keeps its own fixed model.',
       },
       reference_image_path: {
         type: 'string',
@@ -409,8 +429,8 @@ export function apply(ctx: Context, config: Config): void {
       },
       quality: {
         type: 'string',
-        enum: ['auto', 'low', 'medium', 'high'],
-        description: 'Image quality. Omit for deployment default.',
+        enum: [...IMAGE_QUALITIES],
+        description: 'Image quality. auto, low, medium, and high are accepted by GPT Image 2 and GPT Image 2.5; xhigh and max are GPT Image 2.5 tiers only. Omit for deployment default.',
       },
       output_format: {
         type: 'string',
@@ -462,9 +482,9 @@ export function apply(ctx: Context, config: Config): void {
             },
           },
           size: { type: 'string', required: true },
-          quality: { type: 'string', enum: ['auto', 'low', 'medium', 'high'], required: true },
+          quality: { type: 'string', enum: [...IMAGE_QUALITIES], required: true },
           requestedSize: { type: 'string' },
-          requestedQuality: { type: 'string', enum: ['auto', 'low', 'medium', 'high'] },
+          requestedQuality: { type: 'string', enum: [...IMAGE_QUALITIES] },
           providerSize: { type: 'string' },
           qualitySource: { type: 'string', enum: ['provider', 'request'] },
           outputFormat: { type: 'string', enum: ['png', 'jpeg', 'webp'], required: true },
@@ -512,6 +532,10 @@ export function apply(ctx: Context, config: Config): void {
       const referenceImagePath = normalizedReferenceImagePath(args.reference_image_path)
       const size = imageSize(args.size ?? config.defaultSize)
       const quality = args.quality ?? config.defaultQuality
+      const requestedModel = args.model === undefined ? undefined : imageModel(args.model)
+      if (requestedModel !== undefined && config.authMode === 'codex-subscription') {
+        throw new Error(`The Codex subscription endpoint fixes the image model to ${CODEX_SUBSCRIPTION_MODEL}. Use API-key mode to select a model.`)
+      }
       const outputFormat = args.output_format ?? config.defaultOutputFormat
       const requestBackground = args.background ?? config.defaultBackground
       const outputCompression = args.output_compression ?? config.defaultOutputCompression
@@ -552,7 +576,9 @@ export function apply(ctx: Context, config: Config): void {
               ? 'transparent background output'
               : args.output_compression !== undefined
                 ? 'output_compression'
-                : undefined
+                : requestedModel !== undefined
+                  ? 'model selection'
+                  : undefined
         const auth = await resolveImageAuth(requestSignal, apiKeyReason)
         requestSignal.throwIfAborted()
         const reference = referenceImagePath === undefined ? undefined : await referenceImageFromPath(ctx, exec, referenceImagePath)
@@ -564,7 +590,7 @@ export function apply(ctx: Context, config: Config): void {
         if (auth.kind === 'codex-subscription' && args.output_compression !== undefined) {
           throw new Error('output_compression is available only in API-key mode')
         }
-        const requestModel = auth.kind === 'codex-subscription' ? 'gpt-image-2' : config.model
+        const requestModel = auth.kind === 'codex-subscription' ? CODEX_SUBSCRIPTION_MODEL : requestedModel ?? config.model
         const client = new OpenAIImageClient({
           baseUrl: auth.kind === 'codex-subscription' ? CODEX_IMAGE_BASE_URL : config.baseUrl,
           apiKey: auth.apiKey,
@@ -579,6 +605,7 @@ export function apply(ctx: Context, config: Config): void {
         })
         const generated = await client.generate({
           prompt,
+          model: requestModel,
           size,
           quality,
           outputFormat: requestOutputFormat,

@@ -276,6 +276,68 @@ describe('Host image generation plugin', () => {
     })
   })
 
+  it('exposes the full GPT Image 2.5 quality ladder in the tool and output schemas', () => {
+    const { definition } = harness()
+    if (definition.parameters === undefined || definition.output === undefined) throw new Error('missing tool schema')
+
+    const parameterProperties = (definition.parameters as { properties?: Record<string, { enum?: unknown }> }).properties
+    expect(parameterProperties?.quality?.enum).toEqual(['auto', 'low', 'medium', 'high', 'xhigh', 'max'])
+
+    const properties = (definition.output.schema as { properties?: Record<string, { enum?: unknown }> }).properties
+    expect(properties?.quality?.enum).toEqual(['auto', 'low', 'medium', 'high', 'xhigh', 'max'])
+    expect(properties?.requestedQuality?.enum).toEqual(['auto', 'low', 'medium', 'high', 'xhigh', 'max'])
+  })
+
+  it('applies a per-call GPT Image 2.5 model and extended quality in API-key mode', async () => {
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      return sseFinal()
+    }))
+    const { definition } = harness()
+    if (definition.execute === undefined) throw new Error('missing tool body')
+
+    const value = await definition.execute({
+      prompt: 'A cobalt glass lighthouse',
+      model: '  gpt-image-2.5-sunburst  ',
+      quality: 'max',
+    }, execution())
+
+    expect(bodies[0]).toMatchObject({ model: 'gpt-image-2.5-sunburst', quality: 'max' })
+    expect(value).toMatchObject({ model: 'gpt-image-2.5-sunburst', requestedQuality: 'max' })
+  })
+
+  it('falls back to the configured model and normalizes an invalid per-call model', async () => {
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      return sseFinal()
+    }))
+    const { definition } = harness({ config: { model: 'gpt-image-2' } })
+    if (definition.execute === undefined) throw new Error('missing tool body')
+
+    await expect(definition.execute({ prompt: 'A model name with spaces', model: 'gpt image 2.5' }, execution()))
+      .rejects.toThrow('only letters, digits')
+    expect(bodies).toHaveLength(0)
+
+    const value = await definition.execute({ prompt: 'A configured model image' }, execution())
+    expect(bodies[0]).toMatchObject({ model: 'gpt-image-2' })
+    expect(value).toMatchObject({ model: 'gpt-image-2' })
+  })
+
+  it('keeps the fixed Codex subscription model and rejects per-call overrides', async () => {
+    const fetch = vi.fn()
+    vi.stubGlobal('fetch', fetch)
+    const { definition } = harness({ config: { authMode: 'codex-subscription' } })
+    if (definition.execute === undefined) throw new Error('missing tool body')
+
+    await expect(definition.execute({
+      prompt: 'A subscription whale',
+      model: 'gpt-image-2.5-flare',
+    }, execution())).rejects.toThrow('fixes the image model to gpt-image-2')
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it('authorizes durable bytes from native metadata and Code Mode markers', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => sseFinal()))
     const { definition, rpcHandler, readImage, setEvents } = harness()

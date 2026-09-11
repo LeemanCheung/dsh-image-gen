@@ -5,7 +5,22 @@ export const PRESENTATION_SCHEMA = 'dsh-image-gen/presentation-v1' as const
 export const REFERENCE_SCHEMA = 'dsh-image-gen/ref-v1' as const
 export const REFERENCE_MARKER = 'DSH_IMAGE_REF_V1 ' as const
 
-export type ImageQuality = 'auto' | 'low' | 'medium' | 'high'
+export type ImageQuality = 'auto' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
+
+/**
+ * Canonical quality ladder in provider order.
+ *
+ * GPT Image 2 and GPT Image 2.5 both accept `auto`, `low`, `medium`, and `high`.
+ * The `xhigh` and `max` tiers are GPT Image 2.5 additions; the provider rejects
+ * them for older image models, so callers select quality together with a model.
+ */
+export const IMAGE_QUALITIES = ['auto', 'low', 'medium', 'high', 'xhigh', 'max'] as const satisfies readonly ImageQuality[]
+
+/** Narrow an untrusted value to a provider-supported image quality. */
+export function isImageQuality(value: unknown): value is ImageQuality {
+  return typeof value === 'string' && (IMAGE_QUALITIES as readonly string[]).includes(value)
+}
+
 export type ImageOutputFormat = 'png' | 'jpeg' | 'webp'
 export type ImageBackground = 'auto' | 'opaque' | 'transparent'
 export type ImageMediaType = 'image/png' | 'image/jpeg' | 'image/webp'

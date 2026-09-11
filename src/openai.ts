@@ -1,6 +1,7 @@
-/** Small dependency-free GPT Image 2 streaming client. */
+/** Small dependency-free GPT Image streaming client. */
 
 import { CODEX_IMAGE_BASE_URL } from './codex.ts'
+import { isImageQuality } from './types.ts'
 import type {
   ImageBackground,
   ImageMediaType,
@@ -14,10 +15,13 @@ const MIN_PIXELS = 655_360
 const MAX_PIXELS = 8_294_400
 const MAX_EDGE = 3_840
 const MAX_ERROR_BYTES = 8_192
+const MAX_MODEL_CHARS = 128
 
 /** One validated Image API request. */
 export interface GenerateImageRequest {
   prompt: string
+  /** Provider image model for this call; defaults to the client's configured model. */
+  model?: string
   size: string
   quality: ImageQuality
   outputFormat: ImageOutputFormat
@@ -95,6 +99,18 @@ export class ImageApiError extends Error {
   }
 }
 
+/** Validate one provider image model identifier. */
+export function imageModel(value: string): string {
+  const normalized = value.trim()
+  if (normalized.length === 0 || normalized.length > MAX_MODEL_CHARS) {
+    throw new TypeError(`model must contain 1–${MAX_MODEL_CHARS} characters`)
+  }
+  if (!/^[A-Za-z0-9][A-Za-z0-9._:-]*$/u.test(normalized)) {
+    throw new TypeError('model must contain only letters, digits, and the characters . _ : -')
+  }
+  return normalized
+}
+
 /** Validate an OpenAI base URL before a credential can be sent to it. */
 export function imageApiBaseUrl(value: string): string {
   const url = new URL(value)
@@ -136,11 +152,11 @@ function outputFormat(value: unknown, fallback: ImageOutputFormat): ImageOutputF
 }
 
 function quality(value: unknown, fallback: ImageQuality): ImageQuality {
-  return value === 'auto' || value === 'low' || value === 'medium' || value === 'high' ? value : fallback
+  return isImageQuality(value) ? value : fallback
 }
 
 function qualitySource(value: unknown): ImageMetadataSource {
-  return value === 'auto' || value === 'low' || value === 'medium' || value === 'high' ? 'provider' : 'request'
+  return isImageQuality(value) ? 'provider' : 'request'
 }
 
 function background(value: unknown, fallback: ImageBackground): ImageBackground {
@@ -390,7 +406,7 @@ function wait(ms: number, signal: AbortSignal): Promise<void> {
 
 function imageEditBody(options: OpenAIImageClientOptions, request: GenerateImageRequest, reference: ImageGenerationInput): FormData {
   const body = new FormData()
-  body.append('model', options.model)
+  body.append('model', request.model ?? options.model)
   body.append('prompt', request.prompt)
   body.append('size', request.size)
   body.append('quality', request.quality)
@@ -443,7 +459,7 @@ export class OpenAIImageClient {
     }
     const body = reference === undefined
       ? JSON.stringify({
-          model: this.options.model,
+          model: request.model ?? this.options.model,
           prompt: request.prompt,
           size: request.size,
           quality: request.quality,

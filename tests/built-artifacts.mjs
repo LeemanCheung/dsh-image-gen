@@ -35,7 +35,7 @@ assert.equal(
 )
 
 const manifest = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
-assert.equal(manifest.version, '0.3.2')
+assert.equal(manifest.version, '0.4.0')
 assert.equal(manifest.dsh.bundle.patch, './cordis.patch.yml')
 assert.equal(manifest.dsh.client.platform, 'web')
 assert.deepEqual(manifest.dsh.client.inject, [
