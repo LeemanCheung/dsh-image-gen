@@ -92,10 +92,10 @@ Review third-party source before installation and pin release tags or commits. F
 ```powershell
 dsh plugin --profile web add dsh-codex-connect
 dsh openai-codex login
-dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#main
+dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.4.0
 ```
 
-The published tags stop at `v0.3.1`, so a `v0.4.0` tag does not exist yet; the GPT Image 2.5 work lives on `main` and is only installable from there until that tag is created. For production, pin the exact commit you reviewed (`.../dsh-image-gen#<sha>`) rather than a moving branch.
+`v0.4.0` is the current GPT Image 2.5 release. For production, pin the exact commit you reviewed (`.../dsh-image-gen#<sha>`) rather than a moving branch; `main` carries unreleased work between tags.
 
 This repository does not publish to npm. The npm package named `dsh-image-gen` belongs to a different project by another author, so `npm install dsh-image-gen` or a bare `dsh plugin add dsh-image-gen` will not install this plugin. Install from this GitHub repository.
 
