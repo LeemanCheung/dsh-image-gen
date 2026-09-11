@@ -2,3 +2,18 @@
 - insert:
     - id: image-gen
       name: 'dsh-image-gen'
+      # A loader entry, not a module's exported `inject` array, owns the runtime
+      # Context capability boundary, so declare the plugin's own services here.
+      inject: [tools, attachments, credentials, connection, webServer, sessionPersistence]
+
+# `connection.rpc.handle()` registers the loopback image/progress route through
+# `webServer.register()`, and by then it is reading the `connection` service's
+# own context. DSH 0.1.5 injects `webRuntime` into the web bundle's connection
+# entry but not `webServer`, so every plugin that opens a loopback RPC channel
+# fails the whole plugin tree at boot with:
+#
+#   cannot get property "webServer" without inject
+#
+# Keep the original runtime dependency and add the missing route carrier.
+- id: connection
+  inject: [webRuntime, webServer]

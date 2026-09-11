@@ -82,6 +82,8 @@ Version `0.3.2` targets `0.1.2-rc.1` and no longer claims compatibility with the
 
 Version `0.4.0` adds GPT Image 2.5 support (`gpt-image-2.5-flare` / `gpt-image-2.5-sunburst`, a per-call `model`, and the `xhigh` / `max` quality tiers). Those additions are verified by typecheck, deterministic build, 51 keyless tests, and package smoke only: no GPT Image 2.5 request was sent to a billed account, and the Codex subscription endpoint has not been shown to accept the 2.5 aliases, so the subscription path stays on `gpt-image-2`.
 
+The same release fixes a real DSH mount failure that mocked tests could not see. `connection.rpc.handle()` registers the plugin's loopback route through `webServer.register()`, and on DSH `0.1.5-rc.1` the `connection` loader entry carries `webRuntime` but not `webServer`, so the whole plugin tree failed at boot with `cannot get property "webServer" without inject`. Because a loader entry — not a module's exported `inject` array — owns the runtime capability boundary, `cordis.patch.yml` now grants `webServer` to the `connection` entry and declares the plugin's own services. Verified by booting a real DSH Web host from this repository with an empty profile patch: the plugin tree loads, the server answers HTTP 200, and the served client module is this build.
+
 ## Install
 
 Review third-party source before installation and pin release tags or commits. For the default keyless subscription path, install Codex Connect, sign in once, then install this plugin:

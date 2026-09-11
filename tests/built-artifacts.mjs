@@ -7,7 +7,7 @@ import vm from 'node:vm'
 const host = await import('../lib/index.js')
 assert.equal(host.name, 'image-gen')
 assert.equal(typeof host.apply, 'function')
-assert.deepEqual(host.inject, ['tools', 'attachments', 'credentials', 'connection', 'sessionPersistence'])
+assert.deepEqual(host.inject, ['tools', 'attachments', 'credentials', 'connection', 'webServer', 'sessionPersistence'])
 
 let descriptor
 const windowValue = {
@@ -59,5 +59,20 @@ assert.equal(semver.satisfies('0.1.2-rc.1', manifest.dsh.compatibility.dsh), tru
 assert.equal(semver.satisfies('0.1.2-alpha.5', manifest.dsh.compatibility.dsh), false)
 assert.equal('dsh-client-runtime' in manifest.peerDependencies, false)
 assert.equal(manifest.exports['./client'].default, './lib/client.js')
+
+// A loader entry, not the module's exported `inject` array, owns the runtime
+// capability boundary. The plugin opens a loopback RPC route through
+// `connection.rpc.handle()`, which reaches `webServer.register()` on the
+// connection service's own context, so the patch must grant `webServer` to the
+// connection entry as well as to this plugin's own entry.
+const patch = await readFile(new URL('../cordis.patch.yml', import.meta.url), 'utf8')
+for (const service of ['tools', 'attachments', 'credentials', 'connection', 'webServer', 'sessionPersistence']) {
+  assert.match(patch, new RegExp(`\\b${service}\\b`), `cordis.patch.yml must grant ${service}`)
+}
+assert.match(
+  patch,
+  /- id: connection\s*\n\s*inject:\s*\[[^\]]*\bwebServer\b[^\]]*\]/u,
+  'cordis.patch.yml must grant webServer to the connection loader entry',
+)
 
 console.log('built artifact smoke passed')

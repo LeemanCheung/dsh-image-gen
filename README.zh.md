@@ -82,6 +82,8 @@ OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，通过订阅 OAu
 
 `0.4.0` 增加 GPT Image 2.5 支持（`gpt-image-2.5-flare` / `gpt-image-2.5-sunburst`、按调用 `model`、`xhigh` / `max` 画质）。这些新增能力已通过类型检查、确定性构建、51 项 keyless 测试与打包冒烟验证；**未**在真实计费账号上调用过 GPT Image 2.5 模型，也**未**验证 Codex 订阅端点是否接受 2.5 别名，因此订阅路径继续固定 `gpt-image-2`。
 
+同一版本修复了一个 mock 测试看不到的真实挂载故障：`connection.rpc.handle()` 会通过 `webServer.register()` 注册插件的回环路由，而在 DSH `0.1.5-rc.1` 上 `connection` 这个 loader entry 只注入了 `webRuntime`，没有 `webServer`，导致整棵插件树启动即失败并报 `cannot get property "webServer" without inject`。由于运行时能力边界由 loader entry（而非模块导出的 `inject` 数组）决定，`cordis.patch.yml` 现在为 `connection` 行授予 `webServer`，并声明插件自身所需服务。验证方式：用本仓代码在以空 profile 补丁启动的真实 DSH Web 主机上挂载——插件树正常加载、服务端返回 HTTP 200，且实际下发的客户端模块就是本构建。
+
 ## 安装
 
 安装第三方插件前请先审查源码，并固定 Release 标签或提交版本。默认的免 API Key 订阅方式需要先安装 Codex Connect 并登录一次：

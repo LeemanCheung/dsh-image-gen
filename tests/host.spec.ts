@@ -125,7 +125,7 @@ function execution(callId = 'call-1'): ToolRunContext {
 
 describe('Host image generation plugin', () => {
   it('declares every hard service dependency', () => {
-    expect(inject).toEqual(['tools', 'attachments', 'credentials', 'connection', 'sessionPersistence'])
+    expect(inject).toEqual(['tools', 'attachments', 'credentials', 'connection', 'webServer', 'sessionPersistence'])
   })
 
   it('stores the final image before returning a text-only result', async () => {

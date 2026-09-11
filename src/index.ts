@@ -56,8 +56,15 @@ export const CODEX_SUBSCRIPTION_MODEL = 'gpt-image-2'
 /** Default provider image model for API-key mode. */
 export const DEFAULT_IMAGE_MODEL = 'gpt-image-2.5-flare'
 
-/** Required Host services. */
-export const inject = ['tools', 'attachments', 'credentials', 'connection', 'sessionPersistence']
+/**
+ * Required Host services.
+ *
+ * `connection.rpc.handle()` installs its loopback route through
+ * `webServer.register()`. A loader entry — not this exported array — owns the
+ * runtime capability boundary, so `cordis.patch.yml` grants the same list; this
+ * export keeps the container and the build smoke test honest about it.
+ */
+export const inject = ['tools', 'attachments', 'credentials', 'connection', 'webServer', 'sessionPersistence']
 
 /** Deployment configuration for provider access, defaults, and operation bounds. */
 export interface Config {
