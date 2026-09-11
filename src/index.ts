@@ -44,14 +44,15 @@ import {
 export const name = 'image-gen'
 
 /**
- * Image model whose request shape has been verified on the private Codex
- * subscription endpoint.
+ * Image model used when the private Codex subscription endpoint serves a
+ * request without a per-call override.
  *
- * The subscription backend is a private compatibility surface: it has not been
- * verified to accept the GPT Image 2.5 aliases, so subscription mode keeps this
- * fixed model and API-key mode owns provider/model selection.
+ * A live subscription request with `gpt-image-2.5-flare` returned HTTP 200 on
+ * DSH 0.1.5 (2026-09-11), so the alias is accepted. The backend reported
+ * `quality: medium` for a `high` request, so quality handling on this private
+ * surface remains provider-controlled.
  */
-export const CODEX_SUBSCRIPTION_MODEL = 'gpt-image-2'
+export const CODEX_SUBSCRIPTION_MODEL = 'gpt-image-2.5-flare'
 
 /** Default provider image model for API-key mode. */
 export const DEFAULT_IMAGE_MODEL = 'gpt-image-2.5-flare'
@@ -424,7 +425,7 @@ export function apply(ctx: Context, config: Config): void {
       },
       model: {
         type: 'string',
-        description: 'API-key mode only: provider image model for this call, such as gpt-image-2.5-flare or gpt-image-2.5-sunburst. Omit for the deployment default. The Codex subscription endpoint keeps its own fixed model.',
+        description: 'Provider image model for this call, such as gpt-image-2.5-flare, gpt-image-2.5-sunburst, or gpt-image-2. Omit to use the deployment default. Both access paths accept the GPT Image 2.5 aliases; the Codex subscription endpoint controls the final quality it returns.',
       },
       reference_image_path: {
         type: 'string',
@@ -540,9 +541,6 @@ export function apply(ctx: Context, config: Config): void {
       const size = imageSize(args.size ?? config.defaultSize)
       const quality = args.quality ?? config.defaultQuality
       const requestedModel = args.model === undefined ? undefined : imageModel(args.model)
-      if (requestedModel !== undefined && config.authMode === 'codex-subscription') {
-        throw new Error(`The Codex subscription endpoint fixes the image model to ${CODEX_SUBSCRIPTION_MODEL}. Use API-key mode to select a model.`)
-      }
       const outputFormat = args.output_format ?? config.defaultOutputFormat
       const requestBackground = args.background ?? config.defaultBackground
       const outputCompression = args.output_compression ?? config.defaultOutputCompression
@@ -583,9 +581,7 @@ export function apply(ctx: Context, config: Config): void {
               ? 'transparent background output'
               : args.output_compression !== undefined
                 ? 'output_compression'
-                : requestedModel !== undefined
-                  ? 'model selection'
-                  : undefined
+                : undefined
         const auth = await resolveImageAuth(requestSignal, apiKeyReason)
         requestSignal.throwIfAborted()
         const reference = referenceImagePath === undefined ? undefined : await referenceImageFromPath(ctx, exec, referenceImagePath)
@@ -597,7 +593,7 @@ export function apply(ctx: Context, config: Config): void {
         if (auth.kind === 'codex-subscription' && args.output_compression !== undefined) {
           throw new Error('output_compression is available only in API-key mode')
         }
-        const requestModel = auth.kind === 'codex-subscription' ? CODEX_SUBSCRIPTION_MODEL : requestedModel ?? config.model
+        const requestModel = requestedModel ?? (auth.kind === 'codex-subscription' ? CODEX_SUBSCRIPTION_MODEL : config.model)
         const client = new OpenAIImageClient({
           baseUrl: auth.kind === 'codex-subscription' ? CODEX_IMAGE_BASE_URL : config.baseUrl,
           apiKey: auth.apiKey,

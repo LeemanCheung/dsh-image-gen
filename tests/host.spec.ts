@@ -2,8 +2,19 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreToolDecision, ToolDefinition, ToolExecution, ToolRunContext } from '@deepseek-ai/dsh-tools'
 import { apply, inject, type Config } from '../src/index.ts'
+import { CODEX_SUBSCRIPTION_MODEL } from '../src/index.ts'
 import { IMAGE_GEN_RPC_ENDPOINT } from '../src/rpc.ts'
 import { PRESENTATION_SCHEMA, REFERENCE_MARKER, RESULT_SCHEMA } from '../src/types.ts'
+
+// The optional `dsh-codex-connect` peer is absent from the keyless test
+// environment, and the codex module's module-not-found fallback cannot tell
+// Vite's resolver error apart from a genuinely incompatible connector. Substitute
+// a fixed in-memory subscription credential so the subscription paths stay
+// deterministic and never read the real OAuth store.
+vi.mock('../src/codex.ts', async importOriginal => ({
+  ...await importOriginal<typeof import('../src/codex.ts')>(),
+  resolveCodexSubscriptionAuth: vi.fn(async () => ({ accessToken: 'oauth-secret', accountId: 'account-1' })),
+}))
 
 const config: Config = {
   authMode: 'api-key',
@@ -325,17 +336,32 @@ describe('Host image generation plugin', () => {
     expect(value).toMatchObject({ model: 'gpt-image-2' })
   })
 
-  it('keeps the fixed Codex subscription model and rejects per-call overrides', async () => {
-    const fetch = vi.fn()
-    vi.stubGlobal('fetch', fetch)
+  it('routes a per-call GPT Image 2.5 model through the Codex subscription endpoint', async () => {
+    const bodies: Record<string, unknown>[] = []
+    vi.stubGlobal('fetch', vi.fn<typeof fetch>(async (_input, init) => {
+      bodies.push(JSON.parse(String(init?.body)) as Record<string, unknown>)
+      return new Response(JSON.stringify({
+        data: [{ b64_json: Buffer.from('subscription-image').toString('base64') }],
+        output_format: 'png',
+        size: '1774x887',
+        quality: 'medium',
+      }), { headers: { 'content-type': 'application/json' } })
+    }))
     const { definition } = harness({ config: { authMode: 'codex-subscription' } })
     if (definition.execute === undefined) throw new Error('missing tool body')
 
-    await expect(definition.execute({
+    const value = await definition.execute({
       prompt: 'A subscription whale',
-      model: 'gpt-image-2.5-flare',
-    }, execution())).rejects.toThrow('fixes the image model to gpt-image-2')
-    expect(fetch).not.toHaveBeenCalled()
+      model: 'gpt-image-2.5-sunburst',
+      quality: 'max',
+    }, execution())
+
+    expect(bodies[0]).toMatchObject({ model: 'gpt-image-2.5-sunburst', quality: 'max' })
+    expect(value).toMatchObject({ model: 'gpt-image-2.5-sunburst', requestedQuality: 'max' })
+
+    const fallback = await definition.execute({ prompt: 'A default subscription whale' }, execution('call-2'))
+    expect(bodies[1]).toMatchObject({ model: CODEX_SUBSCRIPTION_MODEL })
+    expect(fallback).toMatchObject({ model: CODEX_SUBSCRIPTION_MODEL })
   })
 
   it('authorizes durable bytes from native metadata and Code Mode markers', async () => {

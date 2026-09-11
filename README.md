@@ -30,7 +30,7 @@ These illustrations mirror the shipped developing and completed card states. API
 ## Highlights
 
 - Registers the Codex-compatible model tool name `image_gen`.
-- Selects a provider image model per call or per deployment: GPT Image 2.5 Flare and Sunburst, plus the older `gpt-image-2`.
+- Selects a provider image model per call or per deployment on both access paths: GPT Image 2.5 Flare and Sunburst, plus the older `gpt-image-2`.
 - Accepts the GPT Image 2.5 quality ladder (`auto`, `low`, `medium`, `high`, `xhigh`, `max`) and forwards the requested tier to the provider.
 - Reuses the refreshable OAuth login owned by `dsh-codex-connect`; no `OPENAI_API_KEY` is required for Codex subscription mode.
 - Streams up to three real provider partial images when the API-key Images endpoint is selected; Codex subscription mode keeps the developing animation active until its non-streaming response arrives.
@@ -45,13 +45,13 @@ These illustrations mirror the shipped developing and completed card states. API
 
 OpenAI Codex's built-in `image_gen` tool hardcodes `gpt-image-2`, calls the ChatGPT Codex Images endpoint with subscription OAuth, records one working state, and saves the completed image under Codex's generated-images directory. Its public backend currently requests a non-streaming JSON response and its UI does not expose a distinctive diffusion animation.
 
-`dsh-image-gen` keeps the compatible `image_gen` name and subscription model while improving the visible process:
+`dsh-image-gen` keeps the compatible `image_gen` name and improves the visible process:
 
 | Experience | Codex | dsh-image-gen |
 | --- | --- | --- |
 | GPT Image 2 (subscription endpoint) | Yes | Yes |
-| GPT Image 2.5 Flare / Sunburst (API-key mode) | No | Selectable per call or per deployment |
-| GPT Image 2.5 `xhigh` / `max` quality | No | Forwarded to the provider |
+| GPT Image 2.5 Flare / Sunburst | No | Selectable per call or per deployment on both access paths |
+| GPT Image 2.5 `xhigh` / `max` quality | No | Accepted and forwarded; the subscription endpoint still serves its own quality |
 | Progressive provider frames | Subscription path is currently non-streaming | Subscription animation; API-key mode supports up to 3 live frames |
 | Before first frame | Generic working state | Animated developing plate, scan, and light field |
 | Frame transition | Generic activity | In-place cross-fade and focus development |
@@ -80,7 +80,7 @@ Verified environment:
 
 Version `0.3.2` targets `0.1.2-rc.1` and no longer claims compatibility with the alpha builds. The earlier `0.1.2-alpha.5` lifecycle result belonged to `dsh-image-gen` `0.3.1`; it is retained as history but does not transfer to this release. The `compatible` rc.1 manifest entry records the verified DSH Host/Client/tool-view integration above. A fresh subscription generation reached the provider but returned HTTP 403, so successful new-provider output on rc.1 is still pending authentication/endpoint diagnosis and is not part of that compatibility claim. The last successful real Codex subscription generation was performed on `0.1.0-rc.6` on 2026-08-15.
 
-Version `0.4.0` adds GPT Image 2.5 support (`gpt-image-2.5-flare` / `gpt-image-2.5-sunburst`, a per-call `model`, and the `xhigh` / `max` quality tiers). Those additions are verified by typecheck, deterministic build, 51 keyless tests, and package smoke only: no GPT Image 2.5 request was sent to a billed account, and the Codex subscription endpoint has not been shown to accept the 2.5 aliases, so the subscription path stays on `gpt-image-2`.
+Version `0.4.0` adds GPT Image 2.5 support (`gpt-image-2.5-flare` / `gpt-image-2.5-sunburst`, a per-call `model`, and the `xhigh` / `max` quality tiers). The keyless suite verifies the request shaping; a live Codex subscription request then confirmed the private endpoint really accepts those aliases, so the subscription path defaults to `gpt-image-2.5-flare` too. The real subscription run used the signed-in ChatGPT quota, not a billed API account, so no API billing was incurred.
 
 The same release fixes a real DSH mount failure that mocked tests could not see. `connection.rpc.handle()` registers the plugin's loopback route through `webServer.register()`, and on DSH `0.1.5-rc.1` the `connection` loader entry carries `webRuntime` but not `webServer`, so the whole plugin tree failed at boot with `cannot get property "webServer" without inject`. Because a loader entry — not a module's exported `inject` array — owns the runtime capability boundary, `cordis.patch.yml` now grants `webServer` to the `connection` entry and declares the plugin's own services. Verified by booting a real DSH Web host from this repository with an empty profile patch: the plugin tree loads, the server answers HTTP 200, and the served client module is this build.
 
@@ -123,7 +123,7 @@ The model calls `image_gen`. While it runs, the card shows the developing animat
 Tool options:
 
 - `prompt`: detailed generation instructions, 1–32,000 characters and at most 64,000 UTF-8 bytes.
-- `model`: optional provider image model for API-key mode, such as `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, or `gpt-image-2`. Omit it to use the deployment `model`. It accepts letters, digits, and `. _ : -` up to 128 characters. Codex subscription mode fixes its own model, so a per-call `model` requires API-key mode (or `auto` with an API-key fallback).
+- `model`: optional provider image model for this call, such as `gpt-image-2.5-flare`, `gpt-image-2.5-sunburst`, or `gpt-image-2`. Omit it to use the deployment `model`, or the subscription default when the subscription path is active. It accepts letters, digits, and `. _ : -` up to 128 characters. Both access paths accept the GPT Image 2.5 aliases.
 - `reference_image_path`: optional PNG, JPEG, or WebP path. DSH asks for one-time approval naming the file and upload origin before reading it. The bytes are validated without storage, sent only to the API-key `/images/edits` endpoint, and committed as a durable audit attachment only after the Provider succeeds. This mode needs `authMode: api-key`, or `auto` with an API-key fallback; the private Codex subscription endpoint is not treated as an edit API.
 - `size`: `auto` or arbitrary `WIDTHxHEIGHT` accepted by GPT Image 2.x: each edge divisible by 16, no edge above 3840, aspect ratio 1:3–3:1, and 655,360–8,294,400 total pixels.
 - `quality`: `auto`, `low`, `medium`, `high`, `xhigh`, or `max`. GPT Image 2 accepts the first four; `xhigh` and `max` are GPT Image 2.5 tiers and are rejected by the provider on older image models.
@@ -158,7 +158,9 @@ The bundle inserts the `image-gen` row with safe defaults. Override it in the se
     maxConcurrent: 2
 ```
 
-`baseUrl`, `model`, `moderation`, `partialImages`, output compression, and API pricing apply only to API-key mode. The default `model` is `gpt-image-2.5-flare`; set it to `gpt-image-2.5-sunburst` for edit-heavy work or to `gpt-image-2` to stay on the older model. Codex subscription mode fixes the model to `gpt-image-2`, uses the fixed first-party Codex endpoint, returns PNG, and never sends OAuth to `baseUrl`. Configuration fails at load for an invalid provider URL, model, or default image size. Plain HTTP is accepted only for loopback development endpoints. Every credential-bearing request uses `redirect: "error"`.
+`baseUrl`, `model`, `moderation`, `partialImages`, output compression, and API pricing apply only to API-key mode. The default `model` is `gpt-image-2.5-flare`; set it to `gpt-image-2.5-sunburst` for edit-heavy work or to `gpt-image-2` to stay on the older model. Codex subscription mode serves `gpt-image-2.5-flare` by default, accepts a per-call `model`, uses the fixed first-party Codex endpoint, returns PNG, and never sends OAuth to `baseUrl`. Configuration fails at load for an invalid provider URL, model, or default image size. Plain HTTP is accepted only for loopback development endpoints. Every credential-bearing request uses `redirect: "error"`.
+
+A live subscription request on DSH `0.1.5-rc.1` (2026-09-11) confirmed that the private Codex endpoint accepts `gpt-image-2.5-flare` and returns HTTP 200. The same endpoint reported `quality: medium` at `1774x887` for `high`, `xhigh`, and `max` requests alike, with identical token usage: it accepts the 2.5 quality tiers but serves its own size and quality. `size` and `quality` in the result therefore describe what the provider actually returned, and `requestedSize` / `requestedQuality` keep what the call asked for.
 
 ### API-key contract and operation bounds
 
@@ -247,7 +249,8 @@ The build emits:
 ## Known limitations
 
 - Reference edits use a DSH filesystem path plus one-time external-upload approval. A dedicated attachment-picker UI remains future work; headless or `approval: never` sessions reject such uploads.
-- The ChatGPT Codex subscription endpoint is a private compatibility surface and is not documented as an Image API edit endpoint; this plugin keeps subscription reference edits and public-API-only output options disabled.
+- The Codex subscription endpoint is a private compatibility surface. A live request confirmed it accepts the GPT Image 2.5 model aliases, but it ignores the requested `size` and `quality` and returns its own (`1774x887`, `quality: medium` in the 2026-09-11 run). It is still not documented as an Image API edit endpoint, so subscription reference edits and public-API-only output options stay disabled.
+- Subscription `model`, `size`, and `quality` values only shape the request; the provider decides the delivered result, so the card reports the returned facts alongside the requested ones.
 - Final previews are intentionally loopback-only. Remote Web clients receive a clear unavailable state rather than image bytes.
 - Current DSH credential resolution and attachment saving do not accept cancellation signals. The plugin checks cancellation before and after those stages and waits for them during teardown, but cannot interrupt a provider implementation that stalls inside either service.
 - OpenAI may evolve arbitrary-size limits or event fields. The plugin fails closed on incompatible responses instead of guessing.

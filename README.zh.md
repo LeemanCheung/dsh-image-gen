@@ -30,7 +30,7 @@
 ## 亮点
 
 - 注册与 Codex 兼容的模型工具名 `image_gen`。
-- 支持按调用或按部署选择图像模型：GPT Image 2.5 Flare、Sunburst，以及更早的 `gpt-image-2`。
+- 支持按调用或按部署选择图像模型，两条接入路径均可用：GPT Image 2.5 Flare、Sunburst，以及更早的 `gpt-image-2`。
 - 支持 GPT Image 2.5 的完整画质档位（`auto`、`low`、`medium`、`high`、`xhigh`、`max`），并按请求原样转发给 Provider。
 - 复用 `dsh-codex-connect` 管理的可刷新 OAuth 登录态；Codex 订阅模式不需要 `OPENAI_API_KEY`。
 - API Key Images 接口最多流式展示 3 张服务端真实局部图；Codex 订阅接口为非流式，等待期间持续播放显影动画。
@@ -45,13 +45,13 @@
 
 OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，通过订阅 OAuth 调用 ChatGPT Codex Images 接口，并将成图保存到 generated-images 目录。其公开后端当前请求非流式 JSON，界面也没有专属扩散显影动画。
 
-本插件保留相同工具名和订阅模型，同时增强生成体验：
+本插件保留相同工具名，同时增强生成体验：
 
 | 体验 | Codex | dsh-image-gen |
 | --- | --- | --- |
 | GPT Image 2（订阅接口） | 支持 | 支持 |
-| GPT Image 2.5 Flare / Sunburst（API Key 模式） | 不支持 | 可按调用或按部署选择 |
-| GPT Image 2.5 `xhigh` / `max` 画质 | 不支持 | 原样转发给 Provider |
+| GPT Image 2.5 Flare / Sunburst | 不支持 | 两条接入路径都可按调用或按部署选择 |
+| GPT Image 2.5 `xhigh` / `max` 画质 | 不支持 | 接受并转发；订阅端点仍按自己的默认画质出图 |
 | 服务端真实渐进图 | 订阅调用链当前为非流式 | 订阅显影动画；API Key 模式最多展示 3 张真实渐进图 |
 | 首张局部图前 | 通用工作状态 | 显影画布、扫描光和动态光场 |
 | 局部图切换 | 通用活动状态 | 原位交叉淡入并逐步对焦 |
@@ -80,7 +80,7 @@ OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，通过订阅 OAu
 
 `0.3.2` 只声明支持 `0.1.2-rc.1`，不再沿用 alpha 版本的兼容结论。之前 `0.1.2-alpha.5` 的生命周期验证属于 `dsh-image-gen` `0.3.1`，仅作为历史保留，不能证明本版本兼容。manifest 中 rc.1 的 `compatible` 仅表示上面列出的 DSH Host、Client 与工具卡集成已经验证。新的订阅生图请求已到达服务端，但返回 HTTP 403，因此 rc.1 上的新成图成功链路仍需继续排查认证或端点问题，不包含在该兼容结论内。最近一次成功的真实 Codex 订阅生图验证于 2026-08-15 在 `0.1.0-rc.6` 完成。
 
-`0.4.0` 增加 GPT Image 2.5 支持（`gpt-image-2.5-flare` / `gpt-image-2.5-sunburst`、按调用 `model`、`xhigh` / `max` 画质）。这些新增能力已通过类型检查、确定性构建、51 项 keyless 测试与打包冒烟验证；**未**在真实计费账号上调用过 GPT Image 2.5 模型，也**未**验证 Codex 订阅端点是否接受 2.5 别名，因此订阅路径继续固定 `gpt-image-2`。
+`0.4.0` 增加 GPT Image 2.5 支持（`gpt-image-2.5-flare` / `gpt-image-2.5-sunburst`、按调用 `model`、`xhigh` / `max` 画质）。keyless 测试只证明请求构造正确；随后一次真实 Codex 订阅请求证实私有端点确实接受这些别名，因此订阅路径也把默认模型改成 `gpt-image-2.5-flare`。该次真实调用走的是已登录 ChatGPT 订阅额度，不是计费 API 账号，未产生 API 账单。
 
 同一版本修复了一个 mock 测试看不到的真实挂载故障：`connection.rpc.handle()` 会通过 `webServer.register()` 注册插件的回环路由，而在 DSH `0.1.5-rc.1` 上 `connection` 这个 loader entry 只注入了 `webRuntime`，没有 `webServer`，导致整棵插件树启动即失败并报 `cannot get property "webServer" without inject`。由于运行时能力边界由 loader entry（而非模块导出的 `inject` 数组）决定，`cordis.patch.yml` 现在为 `connection` 行授予 `webServer`，并声明插件自身所需服务。验证方式：用本仓代码在以空 profile 补丁启动的真实 DSH Web 主机上挂载——插件树正常加载、服务端返回 HTTP 200，且实际下发的客户端模块就是本构建。
 
@@ -123,7 +123,7 @@ dsh plugin --profile web add .
 工具参数：
 
 - `prompt`：详细提示词，1–32,000 个字符，且不超过 64,000 个 UTF-8 字节。
-- `model`：可选的 Provider 图像模型，仅用于 API Key 模式，例如 `gpt-image-2.5-flare`、`gpt-image-2.5-sunburst` 或 `gpt-image-2`；省略时使用部署配置的 `model`。只接受字母、数字与 `. _ : -`，长度不超过 128。Codex 订阅模式固定自己的模型，因此按调用指定 `model` 需要 API Key 模式（或带 API Key 回退的 `auto`）。
+- `model`：可选的 Provider 图像模型，例如 `gpt-image-2.5-flare`、`gpt-image-2.5-sunburst` 或 `gpt-image-2`；省略时使用部署配置的 `model`，订阅路径使用订阅默认模型。只接受字母、数字与 `. _ : -`，长度不超过 128。两条接入路径都接受 GPT Image 2.5 别名。
 - `reference_image_path`：可选 PNG、JPEG 或 WebP 路径。DSH 会在读取前显示文件名和上传目标，并要求本次调用的一次性授权；图片先在内存中校验，仅发送至 API Key 模式的 `/images/edits`，Provider 成功后才保存为审计附件。该模式需要 `authMode: api-key`，或带 API Key 回退的 `auto`；私有 Codex 订阅端点不作为图片编辑 API 使用。
 - `size`：`auto` 或 GPT Image 2.x 支持的任意 `宽x高`；两边必须能被 16 整除，单边不超过 3840，宽高比在 1:3–3:1，总像素为 655,360–8,294,400。
 - `quality`：`auto`、`low`、`medium`、`high`、`xhigh` 或 `max`。GPT Image 2 只接受前四档；`xhigh` 与 `max` 是 GPT Image 2.5 的档位，在更早的图像模型上会被 Provider 拒绝。
@@ -158,7 +158,9 @@ Bundle 默认插入 `image-gen` 行。可以在所选 profile 的 `cordis.patch.
     maxConcurrent: 2
 ```
 
-`baseUrl`、`model`、`moderation`、`partialImages`、输出压缩和 API 计费仅用于 API Key 模式。默认 `model` 为 `gpt-image-2.5-flare`；偏重编辑可改为 `gpt-image-2.5-sunburst`，需要停留在旧模型可改为 `gpt-image-2`。Codex 订阅模式固定使用 `gpt-image-2` 和官方 Codex 地址、返回 PNG，并且绝不会把 OAuth 发送到 `baseUrl`。Provider URL、模型或默认尺寸无效时，插件会在加载阶段直接失败；普通 HTTP 仅允许回环开发地址；所有携带凭据的请求都使用 `redirect: "error"`。
+`baseUrl`、`model`、`moderation`、`partialImages`、输出压缩和 API 计费仅用于 API Key 模式。默认 `model` 为 `gpt-image-2.5-flare`；偏重编辑可改为 `gpt-image-2.5-sunburst`，需要停留在旧模型可改为 `gpt-image-2`。Codex 订阅模式默认使用 `gpt-image-2.5-flare`、接受按调用 `model`、固定官方 Codex 地址、返回 PNG，并且绝不会把 OAuth 发送到 `baseUrl`。Provider URL、模型或默认尺寸无效时，插件会在加载阶段直接失败；普通 HTTP 仅允许回环开发地址；所有携带凭据的请求都使用 `redirect: "error"`。
+
+2026-09-11 在 DSH `0.1.5-rc.1` 上的一次真实订阅请求确认：私有 Codex 端点接受 `gpt-image-2.5-flare` 并返回 HTTP 200。同端点对 `high`、`xhigh`、`max` 三种请求都返回 `quality: medium` 与 `1774x887`，且 token 用量完全一致——即它接受 2.5 档位参数，但按自己的默认尺寸与画质出图。因此结果中的 `size` / `quality` 描述的是 Provider 实际返回，`requestedSize` / `requestedQuality` 保留调用时的请求值。
 
 ### API Key 合约与运行边界
 
@@ -247,11 +249,12 @@ npm pack --dry-run
 ## 已知限制
 
 - 参考图编辑使用 DSH 文件路径并逐次请求外部上传授权。专用附件选择器仍是后续工作；无交互环境或 `approval: never` 会话会拒绝上传。
-- ChatGPT Codex 订阅端点属于私有兼容接口，官方并未把它描述为 Image API 编辑端点；插件继续禁用订阅参考编辑和仅公开 API 支持的输出参数。
+- ChatGPT Codex 订阅端点属于私有兼容接口。一次真实请求证实它接受 GPT Image 2.5 模型别名，但它会忽略请求中的 `size` 与 `quality`，按自己的默认值出图（2026-09-11 实测为 `1774x887`、`quality: medium`）。官方仍未把它描述为 Image API 编辑端点，因此插件继续禁用订阅参考编辑和仅公开 API 支持的输出参数。
+- 订阅路径的 `model`、`size`、`quality` 只影响请求本身，最终由 Provider 决定交付结果；卡片会同时展示返回事实与请求值。
 - 最终预览刻意限制为回环访问。远程 Web 客户端只会看到明确的不可用状态，不会收到图片字节。
 - 当前 DSH 凭据解析和附件保存服务不接收取消信号。插件会在这些阶段前后检查取消，并在卸载时等待它们结束，但无法中断卡死在服务内部的 Provider 实现。
 - OpenAI 可能调整任意尺寸限制或事件字段。遇到不兼容响应时，插件会安全失败，而不是猜测。
-- GPT Image 2.5 的 API Key 路径仅用确定性的 Provider 模拟响应验证，未在真实计费账号上调用。Codex 订阅端点是否接受 GPT Image 2.5 别名尚未验证，因此在证实之前订阅模式继续固定使用 `gpt-image-2`。
+- GPT Image 2.5 的 API Key 路径仅用确定性的 Provider 模拟响应验证，未在真实计费账号上调用。Codex 订阅路径已用真实订阅额度验证 `gpt-image-2.5-flare`（HTTP 200），`gpt-image-2.5-sunburst` 与 API Key 路径的真实调用仍待验证。
 
 ## 安全
 
