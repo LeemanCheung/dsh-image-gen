@@ -336,7 +336,9 @@ export function apply(ctx: Context, config: Config): void {
    */
   const served = new Map<string, { value: ImageGenerationValue; at: number }>()
   const servedLimit = 32
+  const recallServed = config.servedResultTtlMs > 0
   const rememberServed = (sessionId: string, callId: string, value: ImageGenerationValue): void => {
+    if (!recallServed) return
     const key = keyOf(sessionId, callId)
     served.delete(key)
     served.set(key, { value, at: Date.now() })
@@ -347,10 +349,11 @@ export function apply(ctx: Context, config: Config): void {
     }
   }
   const recentlyServed = (sessionId: string, callId: string): ImageRefValue | undefined => {
+    if (!recallServed) return undefined
     const key = keyOf(sessionId, callId)
     const entry = served.get(key)
     if (entry === undefined) return undefined
-    if (Date.now() - entry.at > config.servedResultTtlMs) {
+    if (Date.now() - entry.at >= config.servedResultTtlMs) {
       served.delete(key)
       return undefined
     }
