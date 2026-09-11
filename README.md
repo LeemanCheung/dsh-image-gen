@@ -97,6 +97,8 @@ dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#main
 
 The published tags stop at `v0.3.1`, so a `v0.4.0` tag does not exist yet; the GPT Image 2.5 work lives on `main` and is only installable from there until that tag is created. For production, pin the exact commit you reviewed (`.../dsh-image-gen#<sha>`) rather than a moving branch.
 
+This repository does not publish to npm. The npm package named `dsh-image-gen` belongs to a different project by another author, so `npm install dsh-image-gen` or a bare `dsh plugin add dsh-image-gen` will not install this plugin. Install from this GitHub repository.
+
 For local development:
 
 ```powershell

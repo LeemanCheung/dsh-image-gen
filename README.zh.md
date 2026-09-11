@@ -97,6 +97,8 @@ dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#main
 
 已发布的标签只到 `v0.3.1`，`v0.4.0` 标签尚不存在；GPT Image 2.5 相关改动目前在 `main` 上，在该标签创建之前只能从 `main` 安装。生产环境请固定你已审查过的具体提交（`.../dsh-image-gen#<sha>`），不要跟随会移动的分支。
 
+本仓库不发布到 npm。npm 上名为 `dsh-image-gen` 的包属于另一位作者的另一个项目，因此 `npm install dsh-image-gen` 或直接 `dsh plugin add dsh-image-gen` 都不会装到本插件。请从本 GitHub 仓库安装。
+
 本地开发安装：
 
 ```powershell
