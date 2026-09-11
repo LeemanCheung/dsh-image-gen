@@ -31,7 +31,7 @@
 
 - 注册与 Codex 兼容的模型工具名 `image_gen`。
 - 支持按调用或按部署选择图像模型，两条接入路径均可用：GPT Image 2.5 Flare、Sunburst，以及更早的 `gpt-image-2`。
-- 支持 GPT Image 2.5 的完整画质档位（`auto`、`low`、`medium`、`high`、`xhigh`、`max`），并按请求原样转发给 Provider。
+- 支持 GPT Image 2.5 的完整画质档位（`auto`、`low`、`medium`、`high`、`xhigh`、`max`）；两条接入路径都接受 2.5 别名，订阅端点则按请求档位分配自己的输出预算。
 - 复用 `dsh-codex-connect` 管理的可刷新 OAuth 登录态；Codex 订阅模式不需要 `OPENAI_API_KEY`。
 - API Key Images 接口最多流式展示 3 张服务端真实局部图；Codex 订阅接口为非流式，等待期间持续播放显影动画。
 - 局部图在同一显影画布上交叉淡入、逐步对焦，最终自然过渡到成图。
@@ -72,13 +72,14 @@ OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，通过订阅 OAu
 
 已验证环境：
 
-- DeepSeek Harness `0.1.2-rc.1`（QA Web Profile 加载、插件启用、Host 注册 `image_gen`、Client 工具卡加载与历史成图卡片回放；同时通过类型检查、确定性构建、测试和打包冒烟）
-- `dsh-codex-connect` `0.1.0-alpha.4.4`
+- DeepSeek Harness `0.1.5-rc.1`（用本仓代码启动真实 Web 主机、插件树加载、注册 `image_gen`、下发客户端模块，同时通过类型检查、确定性构建、测试和打包冒烟）
+- DeepSeek Harness `0.1.2-rc.1`（QA Web Profile 加载、插件启用、Host 注册 `image_gen`、Client 工具卡加载与历史成图卡片回放）
+- `dsh-codex-connect` `0.1.0-alpha.4.34`（真实订阅实测所用版本；`0.3.x` 版本验证时使用的是 `0.1.0-alpha.4.4`）
 - Node.js `24.15.0`（软件包支持：`^22.19.0` 或 `>=24.0.0`）
 - Windows 11 上的 DSH Web profile
 - 真实 Codex 订阅生图、持久回放、Blob 预览和下载控件
 
-`0.3.2` 只声明支持 `0.1.2-rc.1`，不再沿用 alpha 版本的兼容结论。之前 `0.1.2-alpha.5` 的生命周期验证属于 `dsh-image-gen` `0.3.1`，仅作为历史保留，不能证明本版本兼容。manifest 中 rc.1 的 `compatible` 仅表示上面列出的 DSH Host、Client 与工具卡集成已经验证。新的订阅生图请求已到达服务端，但返回 HTTP 403，因此 rc.1 上的新成图成功链路仍需继续排查认证或端点问题，不包含在该兼容结论内。最近一次成功的真实 Codex 订阅生图验证于 2026-08-15 在 `0.1.0-rc.6` 完成。
+`0.3.2` 只声明支持 `0.1.2-rc.1`，不再沿用 alpha 版本的兼容结论。之前 `0.1.2-alpha.5` 的生命周期验证属于 `dsh-image-gen` `0.3.1`，仅作为历史保留，不能证明本版本兼容。manifest 中 rc.1 的 `compatible` 仅表示上面列出的 DSH Host、Client 与工具卡集成已经验证。rc.1 上那次订阅请求曾到达服务端但返回 HTTP 403，该结论现已被取代：在 DSH `0.1.5-rc.1` 上，同一订阅路径对 `gpt-image-2.5-flare` 与 `gpt-image-2.5-sunburst` 均返回 HTTP 200（2026-09-11）。
 
 `0.4.0` 增加 GPT Image 2.5 支持（`gpt-image-2.5-flare` / `gpt-image-2.5-sunburst`、按调用 `model`、`xhigh` / `max` 画质）。keyless 测试只证明请求构造正确；随后多次真实 Codex 订阅请求证实私有端点接受两个 2.5 别名，因此订阅路径也把默认模型改成 `gpt-image-2.5-flare`。这些真实调用走的是已登录 ChatGPT 订阅额度，不是计费 API 账号，未产生 API 账单。
 
@@ -91,8 +92,10 @@ OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，通过订阅 OAu
 ```powershell
 dsh plugin --profile web add dsh-codex-connect
 dsh openai-codex login
-dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.4.0
+dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#main
 ```
+
+已发布的标签只到 `v0.3.1`，`v0.4.0` 标签尚不存在；GPT Image 2.5 相关改动目前在 `main` 上，在该标签创建之前只能从 `main` 安装。生产环境请固定你已审查过的具体提交（`.../dsh-image-gen#<sha>`），不要跟随会移动的分支。
 
 本地开发安装：
 
@@ -239,6 +242,8 @@ npm pack --dry-run
 ```
 
 无凭据测试使用确定性的模拟 SSE/JSON 响应和本地重定向服务，覆盖两种认证模式且不会读取真实秘密，其中包含 GPT Image 2.5 模型与 `xhigh` / `max` 画质的请求体断言。真实 Provider 检查会消耗 Codex 订阅额度或产生 API 账单，因此仅手动执行。`0.2.0` 已用一次已登录 Codex 订阅生图和冷会话浏览器回放完成实测。
+
+`0.4.0` 的验证中，`npm run check` 覆盖了类型检查、51 项 keyless 测试、确定性构建、产物冒烟（现在还会断言 loader entry 的能力授予）以及 `publint`。此外还做了两件事：用本仓代码在空 profile 补丁下启动真实 DSH `0.1.5-rc.1` Web 主机；以及用真实 Codex 订阅请求实测 `gpt-image-2.5-flare` / `gpt-image-2.5-sunburst` 与 `high` / `max` 档位。这些真实调用消耗的是已登录 ChatGPT 订阅额度。
 
 构建产物：
 

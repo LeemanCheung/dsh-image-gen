@@ -31,7 +31,7 @@ These illustrations mirror the shipped developing and completed card states. API
 
 - Registers the Codex-compatible model tool name `image_gen`.
 - Selects a provider image model per call or per deployment on both access paths: GPT Image 2.5 Flare and Sunburst, plus the older `gpt-image-2`.
-- Accepts the GPT Image 2.5 quality ladder (`auto`, `low`, `medium`, `high`, `xhigh`, `max`) and forwards the requested tier to the provider.
+- Accepts the GPT Image 2.5 quality ladder (`auto`, `low`, `medium`, `high`, `xhigh`, `max`); both access paths accept the aliases, and the subscription endpoint budgets its own output from the requested tier.
 - Reuses the refreshable OAuth login owned by `dsh-codex-connect`; no `OPENAI_API_KEY` is required for Codex subscription mode.
 - Streams up to three real provider partial images when the API-key Images endpoint is selected; Codex subscription mode keeps the developing animation active until its non-streaming response arrives.
 - Cross-fades each partial over one animated developing plate, then sharpens into the final image.
@@ -72,13 +72,14 @@ Primary references:
 
 Verified environment:
 
-- DeepSeek Harness `0.1.2-rc.1` (QA Web Profile load, plugin enablement, Host `image_gen` registration, Client tool-view load, and historical generated-card replay; plus typecheck, deterministic build, tests, and package smoke)
-- `dsh-codex-connect` `0.1.0-alpha.4.4`
+- DeepSeek Harness `0.1.5-rc.1` (real Web host boot from this repository, plugin-tree load, `image_gen` registration, served client module, plus typecheck, deterministic build, tests, and package smoke)
+- DeepSeek Harness `0.1.2-rc.1` (QA Web Profile load, plugin enablement, Host `image_gen` registration, Client tool-view load, and historical generated-card replay)
+- `dsh-codex-connect` `0.1.0-alpha.4.34` for the live subscription runs (`0.1.0-alpha.4.4` was the version verified for the `0.3.x` releases)
 - Node.js `24.15.0` (package support: `^22.19.0` or `>=24.0.0`)
 - DSH Web profile on Windows 11
 - Real Codex subscription generation, durable replay, Blob preview, and download controls
 
-Version `0.3.2` targets `0.1.2-rc.1` and no longer claims compatibility with the alpha builds. The earlier `0.1.2-alpha.5` lifecycle result belonged to `dsh-image-gen` `0.3.1`; it is retained as history but does not transfer to this release. The `compatible` rc.1 manifest entry records the verified DSH Host/Client/tool-view integration above. A fresh subscription generation reached the provider but returned HTTP 403, so successful new-provider output on rc.1 is still pending authentication/endpoint diagnosis and is not part of that compatibility claim. The last successful real Codex subscription generation was performed on `0.1.0-rc.6` on 2026-08-15.
+Version `0.3.2` targets `0.1.2-rc.1` and no longer claims compatibility with the alpha builds. The earlier `0.1.2-alpha.5` lifecycle result belonged to `dsh-image-gen` `0.3.1`; it is retained as history but does not transfer to this release. The `compatible` rc.1 manifest entry records the verified DSH Host/Client/tool-view integration above. A fresh subscription generation on rc.1 had reached the provider but returned HTTP 403, so that specific rc.1 claim is superseded: on DSH `0.1.5-rc.1` the same subscription path now returns HTTP 200 for `gpt-image-2.5-flare` and `gpt-image-2.5-sunburst` (2026-09-11).
 
 Version `0.4.0` adds GPT Image 2.5 support (`gpt-image-2.5-flare` / `gpt-image-2.5-sunburst`, a per-call `model`, and the `xhigh` / `max` quality tiers). The keyless suite verifies the request shaping; live Codex subscription requests then confirmed the private endpoint accepts both 2.5 aliases, so the subscription path defaults to `gpt-image-2.5-flare` too. The real subscription runs used the signed-in ChatGPT quota, not a billed API account, so no API billing was incurred.
 
@@ -91,8 +92,10 @@ Review third-party source before installation and pin release tags or commits. F
 ```powershell
 dsh plugin --profile web add dsh-codex-connect
 dsh openai-codex login
-dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#v0.4.0
+dsh plugin --profile web add github:LeemanCheung/dsh-image-gen#main
 ```
+
+The published tags stop at `v0.3.1`, so a `v0.4.0` tag does not exist yet; the GPT Image 2.5 work lives on `main` and is only installable from there until that tag is created. For production, pin the exact commit you reviewed (`.../dsh-image-gen#<sha>`) rather than a moving branch.
 
 For local development:
 
@@ -239,6 +242,8 @@ npm pack --dry-run
 ```
 
 The keyless suite uses deterministic mocked SSE/JSON responses and a local redirect server. It covers both authentication modes without reading real secrets, including the GPT Image 2.5 model and `xhigh` / `max` quality request bodies. Real-provider checks are manual because they consume a Codex subscription allowance or bill an API account. The `0.2.0` release was manually verified with one signed-in Codex subscription generation and cold-session browser replay.
+
+For the `0.4.0` work, `npm run check` covered typecheck, 51 keyless tests, the deterministic build, the built-artifact smoke (which now also asserts the loader-entry grants), and `publint`. Beyond that: a real DSH `0.1.5-rc.1` Web host booted from this repository with an empty profile patch, and live Codex subscription requests exercised `gpt-image-2.5-flare` / `gpt-image-2.5-sunburst` with the `high` and `max` tiers. Those live runs drew on the signed-in ChatGPT quota.
 
 The build emits:
 
