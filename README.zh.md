@@ -79,7 +79,11 @@ OpenAI Codex 内置的 `image_gen` 固定使用 `gpt-image-2`，通过订阅 OAu
 - Windows 11 上的 DSH Web profile
 - 真实 Codex 订阅生图、持久回放、Blob 预览和下载控件
 
-`0.3.2` 只声明支持 `0.1.2-rc.1`，不再沿用 alpha 版本的兼容结论。之前 `0.1.2-alpha.5` 的生命周期验证属于 `dsh-image-gen` `0.3.1`，仅作为历史保留，不能证明本版本兼容。manifest 中 rc.1 的 `compatible` 仅表示上面列出的 DSH Host、Client 与工具卡集成已经验证。rc.1 上那次订阅请求曾到达服务端但返回 HTTP 403，该结论现已被取代：在 DSH `0.1.5-rc.1` 上，同一订阅路径对 `gpt-image-2.5-flare` 与 `gpt-image-2.5-sunburst` 均返回 HTTP 200（2026-09-11）。
+供工具读取的 manifest 目前仍只将 `0.1.2-rc.1` 记为 compatible，范围是 `>=0.1.2-rc.1 <0.1.3-0`。上面的 `0.1.5-rc.1` 是单独记录的主机集成验证，尚未扩大 manifest 范围，也不能证明中间版本或更新版本兼容。CI 使用 `package-lock.json` 解析并锁定的 DSH peer 版本。
+
+`0.3.2` 引入了 `0.1.2-rc.1` 的兼容记录，并停止沿用 alpha 版本结论。之前 `0.1.2-alpha.5` 的生命周期验证属于 `dsh-image-gen` `0.3.1`，仅作为历史保留。manifest 中 rc.1 的 `compatible` 仅表示上面列出的 DSH Host、Client 与工具卡集成已经验证。rc.1 上那次订阅请求曾到达服务端但返回 HTTP 403；后来在 DSH `0.1.5-rc.1` 上，同一订阅路径对 `gpt-image-2.5-flare` 与 `gpt-image-2.5-sunburst` 均返回 HTTP 200（2026-09-11）。这些 provider 结果分别对应各自记录的环境。
+
+[Issue #6](https://github.com/LeemanCheung/dsh-image-gen/issues/6) 报告插件 `0.1.7` 与 DSH `0.1.1-rc.2` 出现 `attachment.originalDimensions is not a declared property`。当前 `0.4.1` 实现会将保存及重新读取的附件投影到插件已声明的字段；无凭据回归测试覆盖了 Host 返回额外元数据时的严格输出 schema 校验。这不代表已经验证对 `0.1.1-rc.2` 的向后兼容。若当前仍能复现，请提供准确的 DSH、插件、Node.js 版本及脱敏后的报错。
 
 `0.4.0` 增加 GPT Image 2.5 支持（`gpt-image-2.5-flare` / `gpt-image-2.5-sunburst`、按调用 `model`、`xhigh` / `max` 画质）。keyless 测试只证明请求构造正确；随后多次真实 Codex 订阅请求证实私有端点接受两个 2.5 别名，因此订阅路径也把默认模型改成 `gpt-image-2.5-flare`。这些真实调用走的是已登录 ChatGPT 订阅额度，不是计费 API 账号，未产生 API 账单。
 

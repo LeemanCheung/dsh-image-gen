@@ -7,7 +7,7 @@ Contributions are welcome through focused issues and pull requests.
 Requirements:
 
 - Node.js 22.19 or newer (Node.js 24 is also tested).
-- DeepSeek Harness 0.1.0-rc.6 or newer compatible prerelease.
+- Use the DeepSeek Harness peer packages resolved by the committed `package-lock.json` for CI-equivalent checks. The manifest currently records `0.1.2-rc.1`; separately recorded host checks are listed in the README and do not imply support for every newer prerelease.
 
 ```powershell
 npm ci
