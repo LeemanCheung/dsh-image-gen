@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Context } from '@deepseek-ai/cordis'
 import type { PreToolDecision, ToolDefinition, ToolExecution, ToolRunContext } from '@deepseek-ai/dsh-tools'
+import { validateJsonSchemaValue } from '@deepseek-ai/dsh-tools'
 import { apply, inject, type Config } from '../src/index.ts'
 import { CODEX_SUBSCRIPTION_MODEL } from '../src/index.ts'
 import { IMAGE_GEN_RPC_ENDPOINT } from '../src/rpc.ts'
@@ -165,6 +166,46 @@ describe('Host image generation plugin', () => {
     const nestedExec = { ...execution(), parent: Symbol('parent') }
     expect(definition.finalizeContent?.(nestedExec as ToolRunContext, { isError: false, value, content: content ?? [] })).toBeUndefined()
     expect(logger.warn).not.toHaveBeenCalled()
+  })
+
+  it.each([undefined, 'assets/minke.png'])('keeps host attachment metadata outside the output schema (reference: %s)', async referenceImagePath => {
+    vi.stubGlobal('fetch', vi.fn(async () => sseFinal()))
+    const { definition, saveImage, readImage, rpcHandler } = harness()
+    if (definition.execute === undefined || definition.output === undefined) throw new Error('missing tool body')
+    const storedRef = {
+      attachmentId: 'sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      mediaType: 'image/png' as const,
+      bytes: 8,
+      width: 1024,
+      height: 1024,
+      name: 'blue-whale.png',
+      originalDimensions: { width: 2048, height: 2048 },
+      futureHostMetadata: { source: 'fixture' },
+    }
+    saveImage.mockResolvedValue(storedRef)
+    readImage.mockResolvedValue({ ref: storedRef, data: new Uint8Array(Buffer.from('png-data')) })
+
+    const value = await definition.execute({
+      prompt: 'A blue glass whale',
+      ...(referenceImagePath === undefined ? {} : { reference_image_path: referenceImagePath }),
+    }, execution())
+    expect(validateJsonSchemaValue(definition.output.schema, value)).toEqual([])
+    expect(value.image).not.toHaveProperty('originalDimensions')
+    expect(value.image).not.toHaveProperty('futureHostMetadata')
+    if (referenceImagePath !== undefined) {
+      expect(value.referenceImage).toBeDefined()
+      expect(value.referenceImage).not.toHaveProperty('originalDimensions')
+      expect(value.referenceImage).not.toHaveProperty('futureHostMetadata')
+    }
+    // The host validator must reject the unprojected attachment that caused #6.
+    expect(validateJsonSchemaValue(definition.output.schema, { ...value, image: storedRef })).not.toEqual([])
+
+    const image = await rpcHandler(IMAGE_GEN_RPC_ENDPOINT.image, {
+      sessionId: 'session-1', callId: 'call-1',
+    }, new AbortController().signal)
+    expect(image).toMatchObject({ ok: true, value: { attachment: value.image } })
+    expect(image).not.toHaveProperty('value.attachment.originalDimensions')
+    expect(image).not.toHaveProperty('value.attachment.futureHostMetadata')
   })
 
   it('requires one-time approval before reading or uploading a reference path', async () => {
