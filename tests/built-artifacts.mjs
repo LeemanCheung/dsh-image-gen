@@ -57,6 +57,14 @@ assert.deepEqual(manifest.dsh.compatibility, {
 })
 assert.equal(semver.satisfies('0.1.2-rc.1', manifest.dsh.compatibility.dsh), true)
 assert.equal(semver.satisfies('0.1.2-alpha.5', manifest.dsh.compatibility.dsh), false)
+// Development dependency updates must preserve the supported runtime baseline.
+for (const [name, version] of Object.entries({
+  '@deepseek-ai/cordis': '4.0.2',
+  '@deepseek-ai/schemastery': '3.18.2',
+})) {
+  assert.equal(semver.satisfies(version, manifest.peerDependencies[name]), true,
+    `${name} peer range must accept the DSH 0.1.2-rc.1 baseline ${version}`)
+}
 assert.equal('dsh-client-runtime' in manifest.peerDependencies, false)
 assert.equal(manifest.exports['./client'].default, './lib/client.js')
 
